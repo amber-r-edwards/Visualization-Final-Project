@@ -43,9 +43,16 @@ def publication_data():
 
 @app.route('/api/metadata')
 def api_metadata():
-    # Load just the publication metadata
-    metadata = pd.read_csv('zinepub_metadata.csv')
-    return metadata.to_json(orient='records')
+    try:
+        # Use the pub_metadata variable that contains the filename
+        if not os.path.exists(pub_metadata):
+            return jsonify({'error': 'CSV file not found'}), 404
+            
+        # Load the publication metadata using the filename
+        metadata_df = pd.read_csv(pub_metadata)
+        return metadata_df.to_json(orient='records')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting Flask app...")
