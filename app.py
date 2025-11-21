@@ -41,19 +41,6 @@ def reuse_network():
 def publication_data():
     return render_template('database.html')
 
-@app.route('/api/metadata')
-def api_metadata():
-    try:
-        # Use the pub_metadata variable that contains the filename
-        if not os.path.exists(pub_metadata):
-            return jsonify({'error': 'CSV file not found'}), 404
-            
-        # Load the publication metadata using the filename
-        metadata_df = pd.read_csv(pub_metadata)
-        return metadata_df.to_json(orient='records')
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
     print("Starting Flask app...")
     app.run(debug=True, host='0.0.0.0', port=5001)

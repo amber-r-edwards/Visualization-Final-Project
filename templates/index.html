@@ -21,22 +21,22 @@
         <h2>Methodology</h2>
         <p>explanations of methods</p>
         
-        <div id="stats" class="stats-grid" style="display: none;">
+        <div id="stats" class="stats-grid">
             <div class="stat-card">
-                <span id="total-matches" class="stat-number">0</span>
-                <div class="stat-label">Text Reuse Matches</div>
-            </div>
-            <div class="stat-card">
-                <span id="total-pages" class="stat-number">0</span>
-                <div class="stat-label">Pages Analyzed</div>
-            </div>
-            <div class="stat-card">
-                <span id="publications" class="stat-number">0</span>
+                <span id="total-publications" class="stat-number">29</span>
                 <div class="stat-label">Publications</div>
             </div>
             <div class="stat-card">
-                <span id="avg-similarity" class="stat-number">0.0</span>
-                <div class="stat-label">Avg. Similarity</div>
+                <span id="total-locations" class="stat-number">20</span>
+                <div class="stat-label">Cities</div>
+            </div>
+            <div class="stat-card">
+                <span id="date-range" class="stat-number">1970-1990</span>
+                <div class="stat-label">Years Active</div>
+            </div>
+            <div class="stat-card">
+                <span id="total-issues" class="stat-number">280+</span>
+                <div class="stat-label">Total Issues</div>
             </div>
         </div>
     </div>
@@ -44,7 +44,6 @@
     <!-- Right Column - Geographic Map -->
     <div class="content-viz">
         <h2 style="margin-bottom: 1rem; color: #555;">Geographic Distribution of Publications</h2>
-        <div id="loading" class="loading">Loading publication data</div>
         <div id="map-container" class="viz-container"></div>
     </div>
 </div>
@@ -53,18 +52,47 @@
 {% block scripts %}
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script>
+    // Publication data from zinepub_metadata.csv
+    const publications = [
+        {name: "Ain't I A Woman?", location: "Iowa City, IA", years: "1970-1974", issues: 31},
+        {name: "All She Wrote", location: "Honolulu, HI", years: "1982-1986", issues: 15},
+        {name: "All Together Journal", location: "Chicago, IL", years: "1972-1972", issues: 1},
+        {name: "At the Foot of the Mountain", location: "Minneapolis, MN", years: "1976-1976", issues: 1},
+        {name: "Atalanta", location: "Storrs, CT", years: "1975-1975", issues: 1},
+        {name: "Aurora", location: "New Haven, CT", years: "1979-1984", issues: 9},
+        {name: "Awake & Move", location: "Penllyn, PA", years: "1971-1971", issues: 2},
+        {name: "Belles Lettres", location: "Arlington, VA", years: "1985-1990", issues: 20},
+        {name: "Berkshire Women's News", location: "Pittsfield, MA", years: "1984-1986", issues: 3},
+        {name: "Between Our Selves", location: "Washington, DC", years: "1985-1985", issues: 3},
+        {name: "Big Mamma Rag", location: "Unknown", years: "1973-1997", issues: 107},
+        {name: "Bitch", location: "Campbell, CA", years: "1986-1987", issues: 3},
+        {name: "Blue Lantern", location: "Charlottesville, VA", years: "1977-1977", issues: 1},
+        {name: "Bottomfish Blues", location: "New York, NY", years: "1987-1990", issues: 4},
+        {name: "Boxcar", location: "San Francisco, CA", years: "1977-1978", issues: 2},
+        {name: "Breakthrough", location: "Houston, TX", years: "1976-1985", issues: 3},
+        {name: "Catalyst", location: "Chicago, IL", years: "1980-1980", issues: 4},
+        {name: "Change", location: "San Francisco, CA", years: "1973-1973", issues: 1},
+        {name: "Change is Gonna Come", location: "San Francisco, CA", years: "1971-1971", issues: 2},
+        {name: "Changing Woman", location: "Portland, OR", years: "1972-1975", issues: 2},
+        {name: "Clarion", location: "Tucson, AZ", years: "1984-1984", issues: 2},
+        {name: "Common Ground", location: "Buffalo, NY", years: "1978-1984", issues: 43},
+        {name: "Connections", location: "Toledo, OH", years: "1980-1983", issues: 23},
+        {name: "Coyote Howls", location: "San Francisco, CA", years: "1977-1979", issues: 5},
+        {name: "Cries from Cassandra", location: "Chicago, IL", years: "1973-1973", issues: 1},
+        {name: "Distaff", location: "New Orleans, LA", years: "1973-1973", issues: 1},
+        {name: "Do It NOW", location: "Los Angeles, CA", years: "1973-1977", issues: 8},
+        {name: "Gold Flower", location: "Minneapolis, MN", years: "1972-1978", issues: 14}
+    ];
+
     // City coordinates for mapping
     const cityCoordinates = {
         'Iowa City, IA': { lat: 41.6612, lon: -91.5302 },
-        'Denver, CO': { lat: 39.7392, lon: -104.9903 },
-        'Minneapolis, MN': { lat: 44.9778, lon: -93.2650 },
         'Chicago, IL': { lat: 41.8781, lon: -87.6298 },
+        'Minneapolis, MN': { lat: 44.9778, lon: -93.2650 },
         'New York, NY': { lat: 40.7128, lon: -74.0060 },
-        'Washington, DC': { lat: 38.9072, lon: -77.0369 },
         'San Francisco, CA': { lat: 37.7749, lon: -122.4194 },
         'Los Angeles, CA': { lat: 34.0522, lon: -118.2437 },
-        'Boston, MA': { lat: 42.3601, lon: -71.0589 },
-        'Philadelphia, PA': { lat: 39.9526, lon: -75.1652 },
+        'Washington, DC': { lat: 38.9072, lon: -77.0369 },
         'Honolulu, HI': { lat: 21.3099, lon: -157.8581 },
         'Storrs, CT': { lat: 41.8084, lon: -72.2495 },
         'New Haven, CT': { lat: 41.3083, lon: -72.9279 },
@@ -81,112 +109,49 @@
         'New Orleans, LA': { lat: 29.9511, lon: -90.0715 }
     };
 
-    // Load and visualize data
-    Promise.all([
-        fetch('/api/metadata').then(response => response.json())
-    ])
-    .then(([metadata]) => {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('stats').style.display = 'grid';
+    // Create map visualization
+    function createMapVisualization() {
+        // Filter out publications without known locations
+        const validPublications = publications.filter(pub => 
+            pub.location !== 'Unknown' && cityCoordinates[pub.location]
+        );
         
-        updateStats(metadata);
-        createMapVisualization(metadata);
-    })
-    .catch(error => {
-        console.error('Error loading data:', error);
-        document.getElementById('loading').textContent = 'Error loading data';
-    });
-    
-    function updateStats(metadata) {
-        const totalPages = metadata.length;
-        const publications = [...new Set(metadata.map(m => m.publication_name))].length;
-        
-        document.getElementById('total-pages').textContent = totalPages.toLocaleString();
-        document.getElementById('publications').textContent = publications;
-        // Remove reuse_data related stats since you're not fetching that data
-        document.getElementById('total-matches').textContent = '0';
-        document.getElementById('avg-similarity').textContent = '0';
-    }
-    
-    function createMapVisualization(metadata) {
-        // Group publications by location
-        const locationData = {};
-        
-        metadata.forEach(page => {
-            const location = page.location;
-            const publication = page.publication_name;
-            
-            if (!location || !publication) return;
-            
-            if (!locationData[location]) {
-                locationData[location] = {
-                    publications: new Set(),
-                    pageCount: 0,
-                    details: []
-                };
+        // Group publications by location for better visualization
+        const locationGroups = {};
+        validPublications.forEach(pub => {
+            if (!locationGroups[pub.location]) {
+                locationGroups[pub.location] = [];
             }
-            
-            locationData[location].publications.add(publication);
-            locationData[location].pageCount++;
-            locationData[location].details.push({
-                publication: publication,
-                date: page.issue_date,
-                volume: page.volume,
-                number: page.number
-            });
+            locationGroups[pub.location].push(pub);
         });
         
-        // Prepare map data
         const lats = [];
         const lons = [];
         const texts = [];
         const sizes = [];
         const colors = [];
         
-        const pubColors = {
-            "AintIAWoman": '#e74c3c',              // Red
-            "BigMammaRag": '#3498db',              // Blue  
-            "DoItNow": '#2ecc71',                  // Green
-            "GoldFlower": '#f39c12',               // Orange
-            "All She Wrote": '#9b59b6',            // Purple
-            "All Together Journal": '#34495e',      // Dark blue-gray
-            "At the Foot of the Mountain": '#e67e22', // Dark orange
-            "Atalanta": '#1abc9c',                 // Turquoise
-            "Aurora": '#f1c40f',                   // Yellow
-            "Awake & Move": '#95a5a6',             // Gray
-            "Belles Lettres": '#8e44ad',           // Dark purple
-            "Berkshire Women's News": '#16a085',    // Dark turquoise
-            "Between Our Selves": '#c0392b',        // Dark red
-            "Bitch": '#d35400',                    // Dark orange-red
-            "Blue Lantern": '#2980b9',             // Medium blue
-            "Bottomfish Blues": '#7f8c8d',         // Blue-gray
-            "Boxcar": '#27ae60',                   // Dark green
-            "Breakthrough": '#e85a4f',             // Bright red-orange
-            "Catalyst": '#9c88ff',                 // Light purple
-            "Change": '#ff6b6b',                   // Light red
-            "Change is Gonna Come": '#4ecdc4',      // Light teal
-            "Changing Woman": '#45b7d1',           // Sky blue
-            "Clarion": '#f9ca24',                  // Bright yellow
-            "Common Ground": '#6c5ce7',            // Medium purple
-            "Connections": '#a29bfe',              // Lavender
-            "Coyote Howls": '#fd79a8',             // Pink
-            "Cries from Cassandra": '#00b894',     // Teal
-            "Distaff": '#e17055',                  // Coral
-            "default": '#bdc3c7'                   // Light gray for unknown
-        };
+        // Color palette for different cities
+        const cityColors = [
+            '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', 
+            '#1abc9c', '#e67e22', '#f1c40f', '#95a5a6', '#8e44ad',
+            '#16a085', '#c0392b', '#d35400', '#2980b9', '#7f8c8d',
+            '#27ae60', '#e85a4f', '#9c88ff', '#ff6b6b', '#4ecdc4'
+        ];
         
-        Object.entries(locationData).forEach(([location, data]) => {
+        Object.entries(locationGroups).forEach(([location, pubs], index) => {
             const coords = cityCoordinates[location];
             if (!coords) return;
             
-            const publications = Array.from(data.publications);
-            const primaryPub = publications[0];
+            const publicationNames = pubs.map(p => p.name);
+            const totalIssues = pubs.reduce((sum, p) => sum + p.issues, 0);
+            const yearRange = `${Math.min(...pubs.map(p => parseInt(p.years.split('-')[0])))} - ${Math.max(...pubs.map(p => parseInt(p.years.split('-')[1])))}`;
             
             lats.push(coords.lat);
             lons.push(coords.lon);
-            texts.push(`${location}<br>${publications.join(', ')}<br>${data.pageCount} pages`);
-            sizes.push(Math.max(15, Math.min(50, data.pageCount * 2)));
-            colors.push(pubColors[primaryPub] || '#95a5a6');
+            texts.push(`<b>${location}</b><br>Publications: ${publicationNames.join(', ')}<br>Total Issues: ${totalIssues}<br>Years: ${yearRange}`);
+            sizes.push(Math.max(10, Math.min(40, totalIssues)));
+            colors.push(cityColors[index % cityColors.length]);
         });
         
         const mapTrace = {
@@ -205,7 +170,7 @@
                 },
                 sizemode: 'diameter'
             },
-            hovertemplate: '<b>%{text}</b><extra></extra>'
+            hovertemplate: '%{text}<extra></extra>'
         };
         
         const layout = {
@@ -224,5 +189,10 @@
         
         Plotly.newPlot('map-container', [mapTrace], layout, {responsive: true});
     }
+
+    // Initialize map when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        createMapVisualization();
+    });
 </script>
 {% endblock %}
