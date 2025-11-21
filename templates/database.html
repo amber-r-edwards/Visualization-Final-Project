@@ -96,6 +96,9 @@ let filteredData = [];
 async function loadData() {
     try {
         const response = await fetch('/api/publications');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         publicationsData = await response.json();
         filteredData = [...publicationsData];
         

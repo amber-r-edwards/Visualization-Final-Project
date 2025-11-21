@@ -15,11 +15,13 @@ from flask import Flask, render_template, jsonify # type: ignore
 import pandas as pd # type: ignore
 import csv
 import os
+import sqlite3
 
 app = Flask(__name__)
 
-#path to CSV files
+#path to files
 pub_metadata = 'zinepub_metadata.csv'
+db_path = 'zine_database.db'
 
 #home page route
 @app.route('/')
@@ -40,6 +42,22 @@ def reuse_network():
 @app.route('/publication-data')
 def publication_data():
     return render_template('database.html')
+
+#API endpoint for publications data
+@app.route('/api/publications')
+def api_publications():
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row  # This makes rows behave like dictionaries
+        
+        cursor = conn.execute("SELECT * FROM Publications ORDER BY pub_id")
+        publications = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return jsonify(publications)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting Flask app...")
