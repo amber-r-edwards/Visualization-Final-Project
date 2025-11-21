@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Publication Database - Feminist Zine Text Reuse Analysis{% endblock %}
+
+{% block content %}
+<div style="padding: 2rem;">
+    <h1>Zine Publications Database</h1>
+    
+    <!-- Search and Filter Controls -->
+    <div style="margin-bottom: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 5px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div>
+                <label for="searchName" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Publication Name:</label>
+                <input type="text" id="searchName" placeholder="Search publication name..." style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div>
+                <label for="searchOrganization" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Organization:</label>
+                <input type="text" id="searchOrganization" placeholder="Search organization..." style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div>
+                <label for="filterLocation" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Location:</label>
+                <select id="filterLocation" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+                    <option value="">All locations</option>
+                </select>
+            </div>
+            <div>
+                <label for="filterRegion" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Region:</label>
+                <select id="filterRegion" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+                    <option value="">All regions</option>
+                </select>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div>
+                <label for="yearRangeStart" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Start Year:</label>
+                <input type="number" id="yearRangeStart" min="1970" max="1997" placeholder="1970" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div>
+                <label for="yearRangeEnd" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">End Year:</label>
+                <input type="number" id="yearRangeEnd" min="1970" max="1997" placeholder="1997" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div>
+                <label for="filterProcessed" style="font-weight: bold; display: block; margin-bottom: 0.25rem;">Processed:</label>
+                <select id="filterProcessed" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
+                    <option value="">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                </select>
+            </div>
+            <div style="display: flex; align-items: end;">
+                <button onclick="clearFilters()" style="width: 100%; padding: 0.5rem; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">Clear Filters</button>
+            </div>
+        </div>
+        
+        <div style="margin-top: 1rem; font-size: 0.9em; color: #666;">
+            Showing <span id="recordCount">0</span> publications
+        </div>
+    </div>
+    
+    <!-- Data Table -->
+    <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 5px;">
+        <table id="publicationsTable" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: #f1f3f4;">
+                <tr>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(0)">ID</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(1)">Publication Name</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(2)">Organization</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(3)">Location</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(4)">Region</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(5)">First Year</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(6)">Last Year</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(7)">Issues</th>
+                    <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; cursor: pointer;" onclick="sortTable(8)">Processed</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loading" style="text-align: center; padding: 2rem; color: #666;">
+        Loading publications data...
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let publicationsData = [];
+let filteredData = [];
+
+// Fetch data from the database
+async function loadData() {
+    try {
+        const response = await fetch('/api/publications');
+        publicationsData = await response.json();
+        filteredData = [...publicationsData];
+        
+        // Populate filter dropdowns
+        populateFilters();
+        
+        // Display initial data
+        displayData();
+        
+        // Hide loading indicator
+        document.getElementById('loading').style.display = 'none';
+        
+        // Add event listeners for real-time filtering
+        addFilterListeners();
+        
+    } catch (error) {
+        console.error('Error loading data:', error);
+        document.getElementById('loading').innerHTML = 'Error loading data. Please try again.';
+    }
+}
+
+// Populate filter dropdowns with unique values
+function populateFilters() {
+    const locations = [...new Set(publicationsData.map(pub => pub.location).filter(Boolean))].sort();
+    const regions = [...new Set(publicationsData.map(pub => pub.region).filter(Boolean))].sort();
+    
+    const locationSelect = document.getElementById('filterLocation');
+    const regionSelect = document.getElementById('filterRegion');
+    
+    locations.forEach(location => {
+        const option = document.createElement('option');
+        option.value = location;
+        option.textContent = location;
+        locationSelect.appendChild(option);
+    });
+    
+    regions.forEach(region => {
+        const option = document.createElement('option');
+        option.value = region;
+        option.textContent = region;
+        regionSelect.appendChild(option);
+    });
+}
+
+// Add event listeners for filters
+function addFilterListeners() {
+    const inputs = ['searchName', 'searchOrganization', 'filterLocation', 'filterRegion', 'yearRangeStart', 'yearRangeEnd', 'filterProcessed'];
+    
+    inputs.forEach(id => {
+        document.getElementById(id).addEventListener('input', filterData);
+    });
+}
+
+// Filter data based on current filter values
+function filterData() {
+    const nameFilter = document.getElementById('searchName').value.toLowerCase();
+    const orgFilter = document.getElementById('searchOrganization').value.toLowerCase();
+    const locationFilter = document.getElementById('filterLocation').value;
+    const regionFilter = document.getElementById('filterRegion').value;
+    const startYear = document.getElementById('yearRangeStart').value;
+    const endYear = document.getElementById('yearRangeEnd').value;
+    const processedFilter = document.getElementById('filterProcessed').value;
+    
+    filteredData = publicationsData.filter(pub => {
+        const matchesName = !nameFilter || (pub.publication_name && pub.publication_name.toLowerCase().includes(nameFilter));
+        const matchesOrg = !orgFilter || (pub.organization && pub.organization.toLowerCase().includes(orgFilter));
+        const matchesLocation = !locationFilter || pub.location === locationFilter;
+        const matchesRegion = !regionFilter || pub.region === regionFilter;
+        const matchesStartYear = !startYear || pub.first_year >= parseInt(startYear);
+        const matchesEndYear = !endYear || pub.last_year <= parseInt(endYear);
+        const matchesProcessed = !processedFilter || pub.processed === processedFilter;
+        
+        return matchesName && matchesOrg && matchesLocation && matchesRegion && matchesStartYear && matchesEndYear && matchesProcessed;
+    });
+    
+    displayData();
+}
+
+// Display filtered data in table
+function displayData() {
+    const tableBody = document.getElementById('tableBody');
+    const recordCount = document.getElementById('recordCount');
+    
+    tableBody.innerHTML = '';
+    recordCount.textContent = filteredData.length;
+    
+    filteredData.forEach(pub => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid #eee';
+        row.innerHTML = `
+            <td style="padding: 0.75rem;">${pub.pub_id}</td>
+            <td style="padding: 0.75rem; font-weight: bold;">${pub.publication_name || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.organization || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.location || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.region || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.first_year || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.last_year || 'N/A'}</td>
+            <td style="padding: 0.75rem;">${pub.issues_in_corpus || 'N/A'}</td>
+            <td style="padding: 0.75rem;">
+                <span style="padding: 0.25rem 0.5rem; border-radius: 3px; background: ${pub.processed === 'yes' ? '#d4edda' : '#f8d7da'}; color: ${pub.processed === 'yes' ? '#155724' : '#721c24'};">
+                    ${pub.processed || 'N/A'}
+                </span>
+            </td>
+        `;
+        
+        // Add click handler to show full details
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', () => showDetails(pub));
+        
+        tableBody.appendChild(row);
+    });
+}
+
+// Show detailed view of publication
+function showDetails(pub) {
+    const details = `
+        Publication: ${pub.publication_name || 'N/A'}
+        Organization: ${pub.organization || 'N/A'}
+        Contributors: ${pub.contributors || 'N/A'}
+        Location: ${pub.location || 'N/A'}
+        Region: ${pub.region || 'N/A'}
+        Years Active: ${pub.first_year || 'N/A'} - ${pub.last_year || 'N/A'}
+        Issues in Corpus: ${pub.issues_in_corpus || 'N/A'}
+        Processed: ${pub.processed || 'N/A'}
+        Source Archive: ${pub.source_archive || 'N/A'}
+        Archive Collection: ${pub.archive_collection || 'N/A'}
+        Notes: ${pub.notes || 'N/A'}
+    `;
+    
+    alert(details);
+}
+
+// Clear all filters
+function clearFilters() {
+    document.getElementById('searchName').value = '';
+    document.getElementById('searchOrganization').value = '';
+    document.getElementById('filterLocation').value = '';
+    document.getElementById('filterRegion').value = '';
+    document.getElementById('yearRangeStart').value = '';
+    document.getElementById('yearRangeEnd').value = '';
+    document.getElementById('filterProcessed').value = '';
+    
+    filteredData = [...publicationsData];
+    displayData();
+}
+
+// Sort table by column
+function sortTable(columnIndex) {
+    const columns = ['pub_id', 'publication_name', 'organization', 'location', 'region', 'first_year', 'last_year', 'issues_in_corpus', 'processed'];
+    const columnName = columns[columnIndex];
+    
+    filteredData.sort((a, b) => {
+        const valueA = a[columnName] || '';
+        const valueB = b[columnName] || '';
+        
+        // Handle numeric columns
+        if (columnName === 'pub_id' || columnName === 'first_year' || columnName === 'last_year' || columnName === 'issues_in_corpus') {
+            return Number(valueA) - Number(valueB);
+        }
+        
+        // Handle text columns
+        return valueA.toString().localeCompare(valueB.toString());
+    });
+    
+    displayData();
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+{% endblock %}
