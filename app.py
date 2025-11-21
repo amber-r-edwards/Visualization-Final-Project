@@ -39,7 +39,7 @@ def reuse_network():
 #publication data route
 @app.route('/publication-data')
 def publication_data():
-    return render_template('publication_data.html')
+    return render_template('database.html')
 
 @app.route('/api/metadata')
 def api_metadata():

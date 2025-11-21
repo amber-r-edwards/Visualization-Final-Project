@@ -82,34 +82,31 @@
 
     // Load and visualize data
     Promise.all([
-        fetch('/api/data').then(response => response.json()),
         fetch('/api/metadata').then(response => response.json())
     ])
-    .then(([data, metadata]) => {
+    .then(([metadata]) => {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('stats').style.display = 'grid';
         
-        updateStats(data.reuse_data, metadata);
+        updateStats(metadata);
         createMapVisualization(metadata);
     })
     .catch(error => {
         console.error('Error loading data:', error);
         document.getElementById('loading').textContent = 'Error loading data';
     });
-
-    function updateStats(reuse_data, metadata) {
-        const totalMatches = reuse_data.length;
+    
+    function updateStats(metadata) {
         const totalPages = metadata.length;
         const publications = [...new Set(metadata.map(m => m.publication_name))].length;
-        const avgSimilarity = reuse_data.length > 0 ? 
-            (reuse_data.reduce((sum, r) => sum + parseFloat(r.similarity_score || r.combined_similarity || 0), 0) / reuse_data.length).toFixed(3) : 0;
         
-        document.getElementById('total-matches').textContent = totalMatches.toLocaleString();
         document.getElementById('total-pages').textContent = totalPages.toLocaleString();
         document.getElementById('publications').textContent = publications;
-        document.getElementById('avg-similarity').textContent = avgSimilarity;
+        // Remove reuse_data related stats since you're not fetching that data
+        document.getElementById('total-matches').textContent = '0';
+        document.getElementById('avg-similarity').textContent = '0';
     }
-
+    
     function createMapVisualization(metadata) {
         // Group publications by location
         const locationData = {};
