@@ -72,8 +72,6 @@
         'Iowa City, IA': { lat: 41.6612, lon: -91.5302 },
         'Denver, CO': { lat: 39.7392, lon: -104.9903 },
         'Minneapolis, MN': { lat: 44.9778, lon: -93.2650 },
-        'St. Paul, MN': { lat: 44.9537, lon: -93.0900 },
-        'Minneapolis-St.Paul, MN': { lat: 44.9653, lon: -93.1778 },
         'Chicago, IL': { lat: 41.8781, lon: -87.6298 },
         'New York, NY': { lat: 40.7128, lon: -74.0060 },
         'Washington, DC': { lat: 38.9072, lon: -77.0369 },
@@ -149,10 +147,35 @@
         const colors = [];
         
         const pubColors = {
-            "AintIAWoman": '#e74c3c',
-            "BigMammaRag": '#3498db', 
-            "DoItNow": '#2ecc71',
-            "GoldFlower": '#f39c12'
+            "AintIAWoman": '#e74c3c',              // Red
+            "BigMammaRag": '#3498db',              // Blue  
+            "DoItNow": '#2ecc71',                  // Green
+            "GoldFlower": '#f39c12',               // Orange
+            "All She Wrote": '#9b59b6',            // Purple
+            "All Together Journal": '#34495e',      // Dark blue-gray
+            "At the Foot of the Mountain": '#e67e22', // Dark orange
+            "Atalanta": '#1abc9c',                 // Turquoise
+            "Aurora": '#f1c40f',                   // Yellow
+            "Awake & Move": '#95a5a6',             // Gray
+            "Belles Lettres": '#8e44ad',           // Dark purple
+            "Berkshire Women's News": '#16a085',    // Dark turquoise
+            "Between Our Selves": '#c0392b',        // Dark red
+            "Bitch": '#d35400',                    // Dark orange-red
+            "Blue Lantern": '#2980b9',             // Medium blue
+            "Bottomfish Blues": '#7f8c8d',         // Blue-gray
+            "Boxcar": '#27ae60',                   // Dark green
+            "Breakthrough": '#e85a4f',             // Bright red-orange
+            "Catalyst": '#9c88ff',                 // Light purple
+            "Change": '#ff6b6b',                   // Light red
+            "Change is Gonna Come": '#4ecdc4',      // Light teal
+            "Changing Woman": '#45b7d1',           // Sky blue
+            "Clarion": '#f9ca24',                  // Bright yellow
+            "Common Ground": '#6c5ce7',            // Medium purple
+            "Connections": '#a29bfe',              // Lavender
+            "Coyote Howls": '#fd79a8',             // Pink
+            "Cries from Cassandra": '#00b894',     // Teal
+            "Distaff": '#e17055',                  // Coral
+            "default": '#bdc3c7'                   // Light gray for unknown
         };
         
         Object.entries(locationData).forEach(([location, data]) => {
