@@ -145,7 +145,7 @@
                 
                 pubs.forEach((pub, index) => {
                     // Add jitter for multiple publications in same city
-                    const jitterAmount = 0.1; // degrees
+                    const jitterAmount = 0.5; // degrees
                     const angle = (index * 2 * Math.PI) / pubs.length;
                     const jitterLat = pubs.length > 1 ? coords.lat + jitterAmount * Math.cos(angle) : coords.lat;
                     const jitterLon = pubs.length > 1 ? coords.lon + jitterAmount * Math.sin(angle) : coords.lon;
@@ -165,7 +165,7 @@
                 text: texts,
                 mode: 'markers',
                 marker: {
-                    size: 12,
+                    size: 20,
                     color: colors,
                     line: {
                         color: 'white',
