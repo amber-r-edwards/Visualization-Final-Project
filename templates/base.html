@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Feminist Zine Text Reuse Analysis{% endblock %}</title>
+    <title>{% block title %}TITLE{% endblock %}</title>
     
     <!-- Plotly.js CDN -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -286,10 +286,10 @@
     <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="navbar-content">
-            <a href="/" class="navbar-brand">Feminist Zine Analysis</a>
+            <a href="/" class="navbar-brand">TITLE</a>
             <ul class="navbar-nav">
-                <li><a href="/reuse-map" class="nav-link {% if request.endpoint == 'reuse_map' %}active{% endif %}">Reuse Map</a></li>
-                <li><a href="/reuse-network" class="nav-link {% if request.endpoint == 'reuse_network' %}active{% endif %}">Reuse Network</a></li>
+                <li><a href="/reuse-map" class="nav-link {% if request.endpoint == 'reuse_map' %}active{% endif %}">Page-Level Reuse Map</a></li>
+                <li><a href="/reuse-network" class="nav-link {% if request.endpoint == 'reuse_network' %}active{% endif %}">Page-Level Reuse Network</a></li>
                 <li><a href="/publication-data" class="nav-link {% if request.endpoint == 'publication_data' %}active{% endif %}">Publication Data</a></li>
             </ul>
         </div>
