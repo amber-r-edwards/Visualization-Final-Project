@@ -11,8 +11,8 @@ How to run:
 3. Open: http://localhost:5000
 """
 
-from flask import Flask, render_template, jsonify
-import pandas as pd
+from flask import Flask, render_template, jsonify # type: ignore
+import pandas as pd # type: ignore
 import csv
 import os
 

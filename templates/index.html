@@ -64,7 +64,7 @@
         {name: "Belles Lettres", location: "Arlington, VA", years: "1985-1990", issues: 20},
         {name: "Berkshire Women's News", location: "Pittsfield, MA", years: "1984-1986", issues: 3},
         {name: "Between Our Selves", location: "Washington, DC", years: "1985-1985", issues: 3},
-        {name: "Big Mamma Rag", location: "Unknown", years: "1973-1997", issues: 107},
+        {name: "Big Mamma Rag", location: "Denver, CO", years: "1973-1997", issues: 107},
         {name: "Bitch", location: "Campbell, CA", years: "1986-1987", issues: 3},
         {name: "Blue Lantern", location: "Charlottesville, VA", years: "1977-1977", issues: 1},
         {name: "Bottomfish Blues", location: "New York, NY", years: "1987-1990", issues: 4},
@@ -93,6 +93,7 @@
         'San Francisco, CA': { lat: 37.7749, lon: -122.4194 },
         'Los Angeles, CA': { lat: 34.0522, lon: -118.2437 },
         'Washington, DC': { lat: 38.9072, lon: -77.0369 },
+        'Denver, CO': { lat: 39.7392, lon: -104.9903 },
         'Honolulu, HI': { lat: 21.3099, lon: -157.8581 },
         'Storrs, CT': { lat: 41.8084, lon: -72.2495 },
         'New Haven, CT': { lat: 41.3083, lon: -72.9279 },
@@ -111,84 +112,86 @@
 
     // Create map visualization
     function createMapVisualization() {
-        // Filter out publications without known locations
-        const validPublications = publications.filter(pub => 
-            pub.location !== 'Unknown' && cityCoordinates[pub.location]
-        );
-        
-        // Group publications by location for better visualization
-        const locationGroups = {};
-        validPublications.forEach(pub => {
-            if (!locationGroups[pub.location]) {
-                locationGroups[pub.location] = [];
-            }
-            locationGroups[pub.location].push(pub);
-        });
-        
-        const lats = [];
-        const lons = [];
-        const texts = [];
-        const sizes = [];
-        const colors = [];
-        
-        // Color palette for different cities
-        const cityColors = [
-            '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', 
-            '#1abc9c', '#e67e22', '#f1c40f', '#95a5a6', '#8e44ad',
-            '#16a085', '#c0392b', '#d35400', '#2980b9', '#7f8c8d',
-            '#27ae60', '#e85a4f', '#9c88ff', '#ff6b6b', '#4ecdc4'
-        ];
-        
-        Object.entries(locationGroups).forEach(([location, pubs], index) => {
-            const coords = cityCoordinates[location];
-            if (!coords) return;
+            // Filter out publications without known locations
+            const validPublications = publications.filter(pub => 
+                pub.location !== 'Unknown' && cityCoordinates[pub.location]
+            );
             
-            const publicationNames = pubs.map(p => p.name);
-            const totalIssues = pubs.reduce((sum, p) => sum + p.issues, 0);
-            const yearRange = `${Math.min(...pubs.map(p => parseInt(p.years.split('-')[0])))} - ${Math.max(...pubs.map(p => parseInt(p.years.split('-')[1])))}`;
+            const lats = [];
+            const lons = [];
+            const texts = [];
+            const colors = [];
             
-            lats.push(coords.lat);
-            lons.push(coords.lon);
-            texts.push(`<b>${location}</b><br>Publications: ${publicationNames.join(', ')}<br>Total Issues: ${totalIssues}<br>Years: ${yearRange}`);
-            sizes.push(Math.max(10, Math.min(40, totalIssues)));
-            colors.push(cityColors[index % cityColors.length]);
-        });
-        
-        const mapTrace = {
-            type: 'scattergeo',
-            locationmode: 'USA-states',
-            lat: lats,
-            lon: lons,
-            text: texts,
-            mode: 'markers',
-            marker: {
-                size: sizes,
-                color: colors,
-                line: {
-                    color: 'white',
-                    width: 2
+            // Color palette for different publications
+            const pubColors = [
+                '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', 
+                '#1abc9c', '#e67e22', '#f1c40f', '#95a5a6', '#8e44ad',
+                '#16a085', '#c0392b', '#d35400', '#2980b9', '#7f8c8d',
+                '#27ae60', '#e85a4f', '#9c88ff', '#ff6b6b', '#4ecdc4'
+            ];
+            
+            // Group by location to handle jittering
+            const locationGroups = {};
+            validPublications.forEach(pub => {
+                if (!locationGroups[pub.location]) {
+                    locationGroups[pub.location] = [];
+                }
+                locationGroups[pub.location].push(pub);
+            });
+            
+            Object.entries(locationGroups).forEach(([location, pubs]) => {
+                const coords = cityCoordinates[location];
+                if (!coords) return;
+                
+                pubs.forEach((pub, index) => {
+                    // Add jitter for multiple publications in same city
+                    const jitterAmount = 0.1; // degrees
+                    const angle = (index * 2 * Math.PI) / pubs.length;
+                    const jitterLat = pubs.length > 1 ? coords.lat + jitterAmount * Math.cos(angle) : coords.lat;
+                    const jitterLon = pubs.length > 1 ? coords.lon + jitterAmount * Math.sin(angle) : coords.lon;
+                    
+                    lats.push(jitterLat);
+                    lons.push(jitterLon);
+                    texts.push(`<b>${pub.name}</b><br>Location: ${location}<br>Years: ${pub.years}<br>Issues: ${pub.issues}`);
+                    colors.push(pubColors[validPublications.indexOf(pub) % pubColors.length]);
+                });
+            });
+            
+            const mapTrace = {
+                type: 'scattergeo',
+                locationmode: 'USA-states',
+                lat: lats,
+                lon: lons,
+                text: texts,
+                mode: 'markers',
+                marker: {
+                    size: 12,
+                    color: colors,
+                    line: {
+                        color: 'white',
+                        width: 2
+                    },
+                    sizemode: 'diameter'
                 },
-                sizemode: 'diameter'
-            },
-            hovertemplate: '%{text}<extra></extra>'
-        };
-        
-        const layout = {
-            geo: {
-                scope: 'usa',
-                projection: {
-                    type: 'albers usa'
+                hovertemplate: '%{text}<extra></extra>'
+            };
+            
+            const layout = {
+                geo: {
+                    scope: 'usa',
+                    projection: {
+                        type: 'albers usa'
+                    },
+                    showland: true,
+                    landcolor: 'rgb(243, 243, 243)',
+                    coastlinecolor: 'rgb(204, 204, 204)',
                 },
-                showland: true,
-                landcolor: 'rgb(243, 243, 243)',
-                coastlinecolor: 'rgb(204, 204, 204)',
-            },
-            height: 600,
-            margin: { t: 20, b: 20, l: 20, r: 20 }
-        };
-        
-        Plotly.newPlot('map-container', [mapTrace], layout, {responsive: true});
-    }
+                height: 600,
+                margin: { t: 20, b: 20, l: 20, r: 20 }
+            };
+            
+            Plotly.newPlot('map-container', [mapTrace], layout, {responsive: true});
+        }
 
     // Initialize map when page loads
     document.addEventListener('DOMContentLoaded', function() {
