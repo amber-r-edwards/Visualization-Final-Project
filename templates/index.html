@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Feminist Zine Text Reuse Analysis{% endblock %}
+
+{% block content %}
+<div class="content-grid">
+    <!-- Left Column - Project Description -->
+    <div class="content-text">
+        <h1>Feminist Zine Network Analysis</h1>
+        
+        <p>This project analyzes text reuse patterns among feminist publications from 1973-1974, revealing how ideas, content, and activism spread through underground networks during the second wave of feminism.</p>
+        
+        <h2>Publications Analyzed</h2>
+        <ul>
+            <li><strong>Ain't I A Woman</strong> - Iowa City, IA</li>
+            <li><strong>Big Mamma Rag</strong> - Denver, CO</li>
+            <li><strong>Do it NOW</strong> - Minneapolis-St.Paul, MN</li>
+            <li><strong>Gold Flower</strong> - Various locations</li>
+        </ul>
+        
+        <h2>Research Questions</h2>
+        <p>Our analysis explores several key questions about feminist zine networks:</p>
+        <ul>
+            <li>How did content spread between publications across different cities?</li>
+            <li>What types of content were most commonly reused?</li>
+            <li>Which publications served as information hubs?</li>
+            <li>How did geographic distance affect content sharing?</li>
+        </ul>
+        
+        <h2>Methodology</h2>
+        <p>We used computational text analysis to identify reused content, including:</p>
+        <ul>
+            <li>N-gram similarity analysis</li>
+            <li>Jaccard similarity coefficients</li>
+            <li>Temporal analysis of content flow</li>
+            <li>Geographic network mapping</li>
+        </ul>
+        
+        <div id="stats" class="stats-grid" style="display: none;">
+            <div class="stat-card">
+                <span id="total-matches" class="stat-number">0</span>
+                <div class="stat-label">Text Reuse Matches</div>
+            </div>
+            <div class="stat-card">
+                <span id="total-pages" class="stat-number">0</span>
+                <div class="stat-label">Pages Analyzed</div>
+            </div>
+            <div class="stat-card">
+                <span id="publications" class="stat-number">0</span>
+                <div class="stat-label">Publications</div>
+            </div>
+            <div class="stat-card">
+                <span id="avg-similarity" class="stat-number">0.0</span>
+                <div class="stat-label">Avg. Similarity</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Column - Geographic Map -->
+    <div class="content-viz">
+        <h2 style="margin-bottom: 1rem; color: #555;">Geographic Distribution of Publications</h2>
+        <div id="loading" class="loading">Loading publication data</div>
+        <div id="map-container" class="viz-container"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // City coordinates for mapping
+    const cityCoordinates = {
+        'Iowa City, IA': { lat: 41.6612, lon: -91.5302 },
+        'Denver, CO': { lat: 39.7392, lon: -104.9903 },
+        'Minneapolis, MN': { lat: 44.9778, lon: -93.2650 },
+        'St. Paul, MN': { lat: 44.9537, lon: -93.0900 },
+        'Minneapolis-St.Paul, MN': { lat: 44.9653, lon: -93.1778 },
+        'Chicago, IL': { lat: 41.8781, lon: -87.6298 },
+        'New York, NY': { lat: 40.7128, lon: -74.0060 },
+        'Washington, DC': { lat: 38.9072, lon: -77.0369 },
+        'San Francisco, CA': { lat: 37.7749, lon: -122.4194 },
+        'Los Angeles, CA': { lat: 34.0522, lon: -118.2437 },
+        'Boston, MA': { lat: 42.3601, lon: -71.0589 },
+        'Philadelphia, PA': { lat: 39.9526, lon: -75.1652 }
+    };
+
+    // Load and visualize data
+    Promise.all([
+        fetch('/api/data').then(response => response.json()),
+        fetch('/api/metadata').then(response => response.json())
+    ])
+    .then(([data, metadata]) => {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('stats').style.display = 'grid';
+        
+        updateStats(data.reuse_data, metadata);
+        createMapVisualization(metadata);
+    })
+    .catch(error => {
+        console.error('Error loading data:', error);
+        document.getElementById('loading').textContent = 'Error loading data';
+    });
+
+    function updateStats(reuse_data, metadata) {
+        const totalMatches = reuse_data.length;
+        const totalPages = metadata.length;
+        const publications = [...new Set(metadata.map(m => m.publication_name))].length;
+        const avgSimilarity = reuse_data.length > 0 ? 
+            (reuse_data.reduce((sum, r) => sum + parseFloat(r.similarity_score || r.combined_similarity || 0), 0) / reuse_data.length).toFixed(3) : 0;
+        
+        document.getElementById('total-matches').textContent = totalMatches.toLocaleString();
+        document.getElementById('total-pages').textContent = totalPages.toLocaleString();
+        document.getElementById('publications').textContent = publications;
+        document.getElementById('avg-similarity').textContent = avgSimilarity;
+    }
+
+    function createMapVisualization(metadata) {
+        // Group publications by location
+        const locationData = {};
+        
+        metadata.forEach(page => {
+            const location = page.location;
+            const publication = page.publication_name;
+            
+            if (!location || !publication) return;
+            
+            if (!locationData[location]) {
+                locationData[location] = {
+                    publications: new Set(),
+                    pageCount: 0,
+                    details: []
+                };
+            }
+            
+            locationData[location].publications.add(publication);
+            locationData[location].pageCount++;
+            locationData[location].details.push({
+                publication: publication,
+                date: page.issue_date,
+                volume: page.volume,
+                number: page.number
+            });
+        });
+        
+        // Prepare map data
+        const lats = [];
+        const lons = [];
+        const texts = [];
+        const sizes = [];
+        const colors = [];
+        
+        const pubColors = {
+            "AintIAWoman": '#e74c3c',
+            "BigMammaRag": '#3498db', 
+            "DoItNow": '#2ecc71',
+            "GoldFlower": '#f39c12'
+        };
+        
+        Object.entries(locationData).forEach(([location, data]) => {
+            const coords = cityCoordinates[location];
+            if (!coords) return;
+            
+            const publications = Array.from(data.publications);
+            const primaryPub = publications[0];
+            
+            lats.push(coords.lat);
+            lons.push(coords.lon);
+            texts.push(`${location}<br>${publications.join(', ')}<br>${data.pageCount} pages`);
+            sizes.push(Math.max(15, Math.min(50, data.pageCount * 2)));
+            colors.push(pubColors[primaryPub] || '#95a5a6');
+        });
+        
+        const mapTrace = {
+            type: 'scattergeo',
+            locationmode: 'USA-states',
+            lat: lats,
+            lon: lons,
+            text: texts,
+            mode: 'markers',
+            marker: {
+                size: sizes,
+                color: colors,
+                line: {
+                    color: 'white',
+                    width: 2
+                },
+                sizemode: 'diameter'
+            },
+            hovertemplate: '<b>%{text}</b><extra></extra>'
+        };
+        
+        const layout = {
+            geo: {
+                scope: 'usa',
+                projection: {
+                    type: 'albers usa'
+                },
+                showland: true,
+                landcolor: 'rgb(243, 243, 243)',
+                coastlinecolor: 'rgb(204, 204, 204)',
+            },
+            height: 600,
+            margin: { t: 20, b: 20, l: 20, r: 20 }
+        };
+        
+        Plotly.newPlot('map-container', [mapTrace], layout, {responsive: true});
+    }
+</script>
+{% endblock %}
