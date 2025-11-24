@@ -102,7 +102,8 @@ def extract_date_from_text(text_content):
 def generate_metadata():
     """Generate CSV metadata for all text files."""
     
-    if not os.path.exists(TXTFILES_DIR):
+    txtfiles_path = Path(TXTFILES_DIR)
+    if not txtfiles_path.exists():
         print(f"❌ Directory not found: {TXTFILES_DIR}")
         return
     
@@ -114,12 +115,11 @@ def generate_metadata():
     print("="*80)
     
     # Scan each publication subdirectory
-    for publication in TXTFILES_DIR:
-        pub_dir = Path(TXTFILES_DIR) / publication
-        
-        if not pub_dir.exists():
-            print(f"⚠️  Skipping {publication} - directory not found")
+    for pub_dir in txtfiles_path.iterdir():  # Fixed: iterate over directory contents
+        if not pub_dir.is_dir():
             continue
+            
+        publication = pub_dir.name
         
         # Get all .txt files in this directory
         txt_files = sorted(pub_dir.glob("*.txt"))
@@ -168,7 +168,7 @@ def generate_metadata():
                 
             except Exception as e:
                 print(f"  ❌ Error reading {txt_file.name}: {e}")
-    
+   
     # Write CSV
     if metadata_records:
         with open(OUTPUT_CSV, 'w', newline='', encoding='utf-8') as f:
