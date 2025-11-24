@@ -200,8 +200,8 @@ def find_shared_content(text1: str, text2: str, ngram_size: int = 4) -> Tuple[st
         best_pos2 = pos2
         best_length = ngram_size
     
-    # Extract context (15 words before and after)
-    context_size = 15
+    # Extract context (50 words before and after)
+    context_size = 50
     
     source_start = max(0, best_pos1 - context_size)
     source_end = min(len(words1), best_pos1 + best_length + context_size)
@@ -402,18 +402,21 @@ def run_parallel_comparison(metadata: pd.DataFrame, config: Config) -> pd.DataFr
     # Check for existing checkpoint
     checkpoint_file = os.path.join(config.output_dir, 'checkpoint.pkl')
     if os.path.exists(checkpoint_file):
-        print(f"\nFound checkpoint file: {checkpoint_file}")
-        response = input("Resume from checkpoint? (y/n): ")
-        if response.lower() == 'y':
+        print(f"\nFound existing checkpoint file: {checkpoint_file}")
+        try:
             with open(checkpoint_file, 'rb') as f:
                 checkpoint_data = pickle.load(f)
             results = checkpoint_data['results']
             start_pair = checkpoint_data['completed_pairs']
-            print(f"Resuming from pair {start_pair:,}/{total_pairs:,}")
-        else:
+            print(f"✓ Automatically resuming from pair {start_pair:,}/{total_pairs:,}")
+            print(f"  ({len(results):,} matches already found)")
+        except Exception as e:
+            print(f"Warning: Could not load checkpoint: {e}")
+            print("Starting from beginning...")
             results = []
             start_pair = 0
     else:
+        print("\nNo checkpoint found - starting fresh analysis")
         results = []
         start_pair = 0
     
@@ -462,7 +465,7 @@ def run_parallel_comparison(metadata: pd.DataFrame, config: Config) -> pd.DataFr
                           f"ETA: {eta_hours:.1f}h")
                 
                 # Checkpoint
-                if processed % config.checkpoint_interval == 0:
+                if config.checkpoint_interval > 0 and processed % config.checkpoint_interval == 0:
                     checkpoint_data = {
                         'results': results,
                         'completed_pairs': processed,
@@ -510,7 +513,7 @@ def classify_reuse_type(row):
         return 'substantial_reuse'
     elif combined_sim > 0.4 and ngram_sim > 0.3:
         return 'moderate_reuse'
-    elif combined_sim > 0.2 and ngram_sim > 0.12:
+    elif combined_sim > 0.2 and ngram_sim > 0.15:
         return 'partial_reuse'
     else:
         return 'minimal_reuse'
@@ -527,7 +530,7 @@ def filter_boilerplate(reuse_df: pd.DataFrame, min_occurrences: int = 5) -> pd.D
     original_count = len(reuse_df)
     
     # Stage 1: Remove very short shared content
-    min_words = 4
+    min_words = 10
     short_content = reuse_df['shared_content'].apply(lambda x: len(x.split()) < min_words)
     reuse_df = reuse_df[~short_content].copy()
     print(f"Stage 1: Removed {short_content.sum()} matches with <{min_words} words")
@@ -627,7 +630,7 @@ def main():
     
     # Performance parameters
     parser.add_argument('--workers', type=int, default=None, help='Number of parallel workers (default: auto)')
-    parser.add_argument('--checkpoint_interval', type=int, default=5000, help='Save checkpoint every N pairs (default: 5000)')
+    parser.add_argument('--checkpoint_interval', type=int, default=5000, help='Save checkpoint every N pairs (default: 5000, 0 to disable)')
     parser.add_argument('--batch_size', type=int, default=100, help='Process pairs in batches of N (default: 100)')
     
     # Output options
