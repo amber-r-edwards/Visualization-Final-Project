@@ -1,9 +1,9 @@
 """
-N-grams and Jaccard Similarity Text Reuse Analysis
+N-grams and Jaccard Similarity Text Reuse Analysis (PARALLEL VERSION)
 =================================================
 
 This script analyzes text reuse between feminist publications using n-grams 
-and Jaccard similarity.
+and Jaccard similarity, with parallel processing for faster execution.
 
 """
 
@@ -15,6 +15,8 @@ from pathlib import Path
 import json
 import os
 from typing import Set, Dict, List, Tuple
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 # ============================================================================
 # TEXT PREPROCESSING AND N-GRAM FUNCTIONS
@@ -215,78 +217,34 @@ def create_text_windows(text: str, window_size: int = 200, overlap: int = 50) ->
             'start_word': 0,
             'end_word': len(words),
             'text': ' '.join(words),
-            'word_count': len(words)
+            'total_words': len(words)
         }]
     
     windows = []
     window_id = 0
-    start = 0
+    start_pos = 0
     
-    while start < len(words):
-        end = min(start + window_size, len(words))
-        window_text = ' '.join(words[start:end])
+    while start_pos < len(words):
+        end_pos = min(start_pos + window_size, len(words))
+        
+        window_text = ' '.join(words[start_pos:end_pos])
         
         windows.append({
             'window_id': window_id,
-            'start_word': start,
-            'end_word': end,
+            'start_word': start_pos,
+            'end_word': end_pos,
             'text': window_text,
-            'word_count': end - start
+            'total_words': len(words)
         })
         
-        window_id += 1
-        start += (window_size - overlap)  # Move forward by window_size - overlap
-        
-        # Break if we've reached the end
-        if end >= len(words):
+        # Move to next window
+        if end_pos >= len(words):
             break
+            
+        start_pos += (window_size - overlap)
+        window_id += 1
     
     return windows
-
-def prepare_windowed_data(metadata: pd.DataFrame, window_size: int = 200, overlap: int = 50) -> pd.DataFrame:
-    """
-    Create windowed version of the metadata for analysis.
-    
-    Returns a new dataframe where each row is a text window instead of a full page.
-    """
-    windowed_data = []
-    
-    for idx, row in metadata.iterrows():
-        windows = create_text_windows(row['text'], window_size, overlap)
-        
-        for window in windows:
-            windowed_row = {
-                'original_page_id': row['page_id'],
-                'window_id': window['window_id'],
-                'combined_id': f"{row['page_id']}_w{window['window_id']}",
-                'publication_name': row['publication_name'],
-                'issue_date': row['issue_date'],
-                'location': row.get('location', ''),
-                'volume': row.get('volume', ''),
-                'number': row.get('number', ''),
-                'page': row.get('page', ''),
-                'text': window['text'],
-                'text_clean': window['text'],  # Already cleaned by create_text_windows
-                'text_length': window['word_count'],
-                'start_word': window['start_word'],
-                'end_word': window['end_word'],
-                'total_page_words': len(clean_text(row['text']).split())
-            }
-            windowed_data.append(windowed_row)
-        
-        # Progress indicator
-        if (idx + 1) % 50 == 0:
-            print(f"Windowed {idx + 1}/{len(metadata)} pages...")
-    
-    windowed_df = pd.DataFrame(windowed_data)
-    print(f"Created {len(windowed_df)} windows from {len(metadata)} pages")
-    print(f"Average {len(windowed_df)/len(metadata):.1f} windows per page")
-    
-    return windowed_df
-
-# ============================================================================
-# DATA LOADING AND PREPROCESSING
-# ============================================================================
 
 def load_and_prepare_metadata(filepath: str = 'zinepage_metadata.csv') -> pd.DataFrame:
     """Load and prepare metadata for analysis."""
@@ -309,7 +267,7 @@ def load_and_prepare_metadata(filepath: str = 'zinepage_metadata.csv') -> pd.Dat
     metadata['text_length'] = metadata['text_clean'].apply(lambda x: len(x.split()))
     
     # Filter out very short texts
-    metadata = metadata[metadata['text_length'] >= 20].copy()
+    metadata = metadata[metadata['text_length'] >= 10].copy()
     
     print(f"Loaded {len(metadata)} pages from {metadata['publication_name'].nunique()} publications")
     print(f"Date range: {metadata['issue_date'].min()} to {metadata['issue_date'].max()}")
@@ -317,83 +275,56 @@ def load_and_prepare_metadata(filepath: str = 'zinepage_metadata.csv') -> pd.Dat
     return metadata
 
 # ============================================================================
-# TEXT REUSE DETECTION
+# PARALLEL PROCESSING FUNCTIONS
 # ============================================================================
 
-def find_text_reuse_windowed(metadata: pd.DataFrame, 
-                            similarity_threshold: float = 0.12,
-                            ngram_size: int = 4,
-                            shingle_size: int = 5,
-                            same_pub: bool = False,
-                            use_windows: bool = True,
-                            window_size: int = 200,
-                            overlap: int = 50) -> pd.DataFrame:
+def process_comparison_chunk(args):
     """
-    Find text reuse using n-grams and Jaccard similarity with optional windowing.
+    Process a chunk of comparisons. This function will be executed in parallel.
+    
+    Args:
+        args: Tuple of (chunk_data, working_data, similarity_threshold, ngram_size, 
+              shingle_size, same_pub, use_windows)
+    
+    Returns:
+        List of comparison results for this chunk
     """
-    if use_windows:
-        print(f"Creating text windows (size={window_size}, overlap={overlap})...")
-        working_data = prepare_windowed_data(metadata, window_size, overlap)
-        # Use combined_id as the identifier for windows
-        id_column = 'combined_id'
-        page_id_column = 'original_page_id'
-    else:
-        working_data = metadata.copy()
-        id_column = 'page_id'
-        page_id_column = 'page_id'
+    chunk_indices, working_data, similarity_threshold, ngram_size, shingle_size, same_pub, use_windows = args
     
     results = []
-    total_comparisons = 0
     
-    print("Starting n-gram and Jaccard similarity analysis...")
-    print(f"Parameters: n-gram size={ngram_size}, shingle size={shingle_size}, threshold={similarity_threshold}")
-    print(f"Analyzing {len(working_data)} text segments...")
-    
-    # Only compare where source comes before or same time as target
-    for idx1, row1 in working_data.iterrows():
-        for idx2, row2 in working_data.iterrows():
-            # Skip if same segment
-            if idx1 == idx2:
+    for idx1 in chunk_indices:
+        row1 = working_data.iloc[idx1]
+        
+        # Compare with all subsequent segments
+        for idx2 in range(idx1 + 1, len(working_data)):
+            row2 = working_data.iloc[idx2]
+            
+            # Skip if same publication and not comparing within same pub
+            if not same_pub and row1['publication'] == row2['publication']:
                 continue
             
-            # Only compare if row1 is earlier or same date
-            if row1['issue_date'] > row2['issue_date']:
+            # Skip if comparing same page to itself (in windowed mode)
+            if use_windows and row1['page_id'] == row2['page_id']:
                 continue
             
-            # Filter by publication if requested
-            if not same_pub and row1['publication_name'] == row2['publication_name']:
-                continue
-            
-            # If using windows, avoid comparing windows from the same page
-            if use_windows and row1['original_page_id'] == row2['original_page_id']:
-                continue
-            
-            total_comparisons += 1
-            
-            # Calculate similarity including shared content
+            # Calculate similarity
             similarity = calculate_text_similarity(
-                row1['text'], 
+                row1['text'],
                 row2['text'],
                 ngram_size=ngram_size,
                 shingle_size=shingle_size
             )
             
-            # Check if above threshold
+            # Only keep if above threshold
             if similarity['combined_similarity'] >= similarity_threshold:
                 result = {
-                    'source_page_id': row1[page_id_column],  # Use the correct column
-                    'target_page_id': row2[page_id_column],  # Use the correct column
-                    'source_publication': row1['publication_name'],
-                    'target_publication': row2['publication_name'],
-                    'source_date': row1['issue_date'],
-                    'target_date': row2['issue_date'],
-                    'time_lag_days': (row2['issue_date'] - row1['issue_date']).days,
-                    'source_volume': row1.get('volume', ''),
-                    'source_number': row1.get('number', ''),
-                    'target_volume': row2.get('volume', ''),
-                    'target_number': row2.get('number', ''),
-                    'source_text_length': row1['text_length'],
-                    'target_text_length': row2['text_length'],
+                    'source_publication': row1['publication'],
+                    'target_publication': row2['publication'],
+                    'source_page_id': row1['page_id'],
+                    'target_page_id': row2['page_id'],
+                    'source_date': row1['date'],
+                    'target_date': row2['date'],
                     'ngram_similarity': similarity['ngram_similarity'],
                     'shingle_similarity': similarity['shingle_similarity'],
                     'combined_similarity': similarity['combined_similarity'],
@@ -402,7 +333,6 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
                     'target_context': similarity['target_context']
                 }
                 
-                # Add window-specific information if using windows
                 if use_windows:
                     result.update({
                         'source_window_id': row1['window_id'],
@@ -418,12 +348,91 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
                     })
                 
                 results.append(result)
-        
-        # Progress indicator
-        if (idx1 + 1) % 50 == 0:
-            print(f"Processed {idx1 + 1}/{len(working_data)} segments...")
     
-    print(f"Total comparisons: {total_comparisons}")
+    return results
+
+def find_text_reuse_windowed(metadata: pd.DataFrame,
+                             similarity_threshold: float = 0.12,
+                             ngram_size: int = 4,
+                             shingle_size: int = 5,
+                             same_pub: bool = False,
+                             use_windows: bool = True,
+                             window_size: int = 200,
+                             overlap: int = 50,
+                             n_cores: int = None) -> pd.DataFrame:
+    """
+    Find text reuse using parallelization for faster processing.
+    
+    Args:
+        n_cores: Number of CPU cores to use. If None, uses all available cores.
+    """
+    print("\n" + "="*70)
+    print("TEXT REUSE DETECTION WITH PARALLEL PROCESSING")
+    print("="*70)
+    
+    # Determine number of cores
+    if n_cores is None:
+        n_cores = cpu_count()
+    print(f"Using {n_cores} CPU cores for parallel processing")
+    
+    # Prepare data (same as original)
+    if use_windows:
+        print(f"Creating overlapping windows (size={window_size}, overlap={overlap})...")
+        windowed_data = []
+        for idx, row in metadata.iterrows():
+            windows = create_text_windows(row['text'], window_size, overlap)
+            for window in windows:
+                windowed_data.append({
+                    'publication': row['publication'],
+                    'page_id': row['page_id'],
+                    'date': row['date'],
+                    'window_id': window['window_id'],
+                    'combined_id': f"{row['page_id']}_w{window['window_id']}",
+                    'start_word': window['start_word'],
+                    'end_word': window['end_word'],
+                    'text': window['text'],
+                    'total_page_words': window['total_words']
+                })
+        working_data = pd.DataFrame(windowed_data)
+        print(f"Created {len(working_data)} text windows from {len(metadata)} pages")
+    else:
+        working_data = metadata.copy()
+        working_data['page_id'] = working_data.index
+    
+    print(f"Threshold: {similarity_threshold}")
+    print(f"N-gram size: {ngram_size}")
+    print(f"Shingle size: {shingle_size}")
+    
+    # Calculate total comparisons
+    n = len(working_data)
+    total_comparisons = n * (n - 1) // 2
+    print(f"Total segments to compare: {n}")
+    print(f"Total pairwise comparisons: {total_comparisons:,}")
+    
+    # Divide work into chunks for parallel processing
+    # Each chunk is a set of indices for the outer loop
+    indices = list(range(len(working_data)))
+    chunk_size = max(1, len(indices) // (n_cores * 4))  # Create more chunks than cores for better load balancing
+    chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
+    
+    print(f"Dividing work into {len(chunks)} chunks for parallel processing...")
+    
+    # Prepare arguments for parallel processing
+    chunk_args = [
+        (chunk, working_data, similarity_threshold, ngram_size, shingle_size, same_pub, use_windows)
+        for chunk in chunks
+    ]
+    
+    # Process chunks in parallel
+    print("Starting parallel processing...")
+    with Pool(processes=n_cores) as pool:
+        chunk_results = pool.map(process_comparison_chunk, chunk_args)
+    
+    # Combine results from all chunks
+    results = []
+    for chunk_result in chunk_results:
+        results.extend(chunk_result)
+    
     print(f"Matches found: {len(results)}")
     
     return pd.DataFrame(results)
@@ -515,11 +524,16 @@ def create_review_sample(reuse_df: pd.DataFrame, metadata: pd.DataFrame, sample_
 # MAIN EXECUTION
 # ============================================================================
 
-def main():
-    """Main execution function."""
+def main(n_cores=None):
+    """
+    Main execution function.
+    
+    Args:
+        n_cores: Number of CPU cores to use. If None, uses all available cores.
+    """
     print("="*70)
-    print("N-GRAMS AND JACCARD SIMILARITY TEXT REUSE ANALYSIS")
-    print("Feminist Publications 1970-1975")
+    print("N-GRAMS AND JACCARD SIMILARITY TEXT REUSE ANALYSIS (PARALLEL)")
+    print("Feminist Publications 1973-1974")
     print("="*70)
     
     # Configuration
@@ -536,13 +550,13 @@ def main():
     # Load data
     metadata = load_and_prepare_metadata()
     
-    # Run analysis
+    # Run analysis with parallel processing
     if USE_WINDOWS:
         print(f"\n🪟 Using windowed analysis (window_size={WINDOW_SIZE}, overlap={OVERLAP})")
-        analysis_suffix = "windowed"
+        analysis_suffix = "windowed_parallel"
     else:
         print("\n📄 Using full-page analysis")
-        analysis_suffix = "fullpage"
+        analysis_suffix = "fullpage_parallel"
     
     reuse_results = find_text_reuse_windowed(
         metadata,
@@ -552,7 +566,8 @@ def main():
         same_pub=False,
         use_windows=USE_WINDOWS,
         window_size=WINDOW_SIZE,
-        overlap=OVERLAP
+        overlap=OVERLAP,
+        n_cores=n_cores
     )
     
     if len(reuse_results) == 0:
@@ -618,4 +633,15 @@ def main():
     print("="*50)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    
+    # Allow specifying number of cores as command line argument
+    n_cores = None
+    if len(sys.argv) > 1:
+        try:
+            n_cores = int(sys.argv[1])
+            print(f"Using {n_cores} cores as specified in command line")
+        except ValueError:
+            print(f"Invalid number of cores: {sys.argv[1]}, using all available cores")
+    
+    main(n_cores=n_cores)
