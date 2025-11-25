@@ -45,6 +45,7 @@
                 <select id="filterProcessed" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 3px;">
                     <option value="">All</option>
                     <option value="yes">Yes</option>
+                    <option value="partial">Partial</option>
                     <option value="no">No</option>
                 </select>
             </div>
@@ -198,8 +199,8 @@ function displayData() {
             <td style="padding: 0.75rem;">${pub.last_year || 'N/A'}</td>
             <td style="padding: 0.75rem;">${pub.issues_in_corpus || 'N/A'}</td>
             <td style="padding: 0.75rem;">
-                <span style="padding: 0.25rem 0.5rem; border-radius: 3px; background: ${pub.processed === 'yes' ? '#d4edda' : '#f8d7da'}; color: ${pub.processed === 'yes' ? '#155724' : '#721c24'};">
-                    ${pub.processed || 'N/A'}
+                <span style="padding: 0.25rem 0.5rem; border-radius: 3px; background: ${pub.processed === 'yes' ? '#d4edda' : pub.processed === 'partial' ? '#fff3cd' : '#f8d7da'}; color: ${pub.processed === 'yes' ? '#155724' : pub.processed === 'partial' ? '#856404' : '#721c24'};">
+                     ${pub.processed || 'N/A'}
                 </span>
             </td>
         `;
