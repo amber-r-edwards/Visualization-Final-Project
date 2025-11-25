@@ -288,7 +288,7 @@ def prepare_windowed_data(metadata: pd.DataFrame, window_size: int = 200, overla
 # DATA LOADING AND PREPROCESSING
 # ============================================================================
 
-def load_and_prepare_metadata(filepath: str = 'zine_pagemetadata.csv') -> pd.DataFrame:
+def load_and_prepare_metadata(filepath: str = 'zinepage_metadata.csv') -> pd.DataFrame:
     """Load and prepare metadata for analysis."""
     metadata = pd.read_csv(filepath)
     
