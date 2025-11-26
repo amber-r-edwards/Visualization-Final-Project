@@ -170,92 +170,90 @@
     </div>
 </div>
 
-    <script>
-        // Global variables
-        let globalData = null;
-        let networkSvg = null;
-        let simulation = null;
+<script>
+    // Global variables
+    let globalData = null;
+    let networkSvg = null;
+    let simulation = null;
 
-        // Load and process the data via API
-        d3.json("/api/reuse-data").then(function(data) {
-            globalData = data; // Store for updates
-            
-            // Parse numerical values and dates
-            data.forEach(d => {
-                d.combined_similarity = +d.combined_similarity;
-                d.ngram_similarity = +d.ngram_similarity;
-                d.shingle_similarity = +d.shingle_similarity;
-                d.source_date = new Date(d.source_date);
-                d.target_date = new Date(d.target_date);
-            });
-
-            // Initialize the network
-            createD3PageNetwork(data);
-            setupControls();
-
-        }).catch(function(error) {
-            console.error("Error loading the reuse data:", error);
-            document.querySelector('.container').innerHTML += 
-                '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
-        });
-
-
+    // Update legend function using the color manager
     function updateLegend() {
-    fetch('/api/publications')
-        .then(response => response.json())
-        .then(publications => {
-            publications.forEach(pub => {
-                publicationColorManager.getColor(pub.pub_id, pub.publication_name);
-            });
-            publicationColorManager.populateLegend('publication-legend');
+        fetch('/api/publications')
+            .then(response => response.json())
+            .then(publications => {
+                publications.forEach(pub => {
+                    publicationColorManager.getColor(pub.pub_id, pub.publication_name);
+                });
+                publicationColorManager.populateLegend('publication-legend');
+            })
+            .catch(error => console.error('Error loading publications for legend:', error));
+    }
+
+    // Load and process the data via API
+    d3.json("/api/reuse-data").then(function(data) {
+        globalData = data; // Store for updates
+        
+        // Parse numerical values and dates
+        data.forEach(d => {
+            d.combined_similarity = +d.combined_similarity;
+            d.ngram_similarity = +d.ngram_similarity;
+            d.shingle_similarity = +d.shingle_similarity;
+            d.source_date = new Date(d.source_date);
+            d.target_date = new Date(d.target_date);
         });
-}
 
-document.addEventListener('DOMContentLoaded', updateLegend);
+        // Initialize the network
+        createD3PageNetwork(data);
+        setupControls();
+        
+        // Update the legend after data is loaded
+        updateLegend();
 
+    }).catch(function(error) {
+        console.error("Error loading the reuse data:", error);
+        document.querySelector('.container').innerHTML += 
+            '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
+    });
 
-        // ============================================================================
-        // D3.JS PAGE-LEVEL NETWORK 
-        // ============================================================================
-        function createD3PageNetwork(reuse_data, similarityThreshold = 0.1, maxLinksPerNode = 20) {
-            // Clear previous network
-            d3.select("#d3-network").selectAll("*").remove();
+    // ============================================================================
+    // D3.JS PAGE-LEVEL NETWORK 
+    // ============================================================================
+    function createD3PageNetwork(reuse_data, similarityThreshold = 0.1, maxLinksPerNode = 20) {
+        // Clear previous network
+        d3.select("#d3-network").selectAll("*").remove();
+        
+        // Use the publication color manager instead of hardcoded colors
+        function getPublicationColor(publication) {
+            // Try to get pub_id from publication name (you might need to adjust this mapping)
+            const pubId = publication; // Or map publication name to pub_id
+            return publicationColorManager.getColor(pubId, publication);
+        }
+
+        console.log(`Using reuse data: ${reuse_data.length} matches`);
+        
+        // Apply filters
+        let filteredReuse = applyCurrentFilters(reuse_data);
+
+        // Create nodes from unique page IDs
+        const connectedPageIds = new Set([
+            ...filteredReuse.map(d => d.source_page_id),
+            ...filteredReuse.map(d => d.target_page_id)
+        ]);
+        
+        const nodes = Array.from(connectedPageIds).map(pageId => {
+            // Find a match to get publication info
+            const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
+            const publication = match?.source_page_id === pageId ? 
+                match.source_publication : match.target_publication;
             
-            // Publication colors - matching index.html
-            const pubColors = {
-                "AintIAWoman": '#e74c3c',        // Red
-                "BigMammaRag": '#3498db',          // Blue
-                "DoitNow": '#2ecc71',              // Green
-                "GoldFlower": '#f39c12',            // Orange
-                "AtalantaVol1No2": '#9b59b6',      // Purple
-                "default": '#95a5a6'                 // Gray for unknown
+            return {
+                id: pageId,
+                publication: publication,
+                color: getPublicationColor(publication), // Use color manager
+                linkCount: 0, // Will be calculated
+                size: 8 // Base size
             };
-
-            console.log(`Using reuse data: ${reuse_data.length} matches`);
-            
-            // Apply filters
-            let filteredReuse = applyCurrentFilters(reuse_data);
-
-            // Create nodes from unique page IDs
-            const connectedPageIds = new Set([
-                ...filteredReuse.map(d => d.source_page_id),
-                ...filteredReuse.map(d => d.target_page_id)
-            ]);
-            
-            const nodes = Array.from(connectedPageIds).map(pageId => {
-                // Find a match to get publication info
-                const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
-                const publication = match?.source_page_id === pageId ? 
-                    match.source_publication : match.target_publication;
-                
-                return {
-                    id: pageId,
-                    publication: publication,
-                    color: pubColors[publication] || pubColors['default'],
-                    linkCount: 0, // Will be calculated
-                    size: 8 // Base size
-                };
-            });
+        });
             
             // Create node lookup
             const nodeMap = new Map(nodes.map(n => [n.id, n]));
