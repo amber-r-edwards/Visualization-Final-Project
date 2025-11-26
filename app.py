@@ -38,6 +38,11 @@ def reuse_map():
 def reuse_network():
     return render_template('reusenetwork.html')
 
+# ADD THIS: geographic network route
+@app.route('/geographic-network')
+def geographic_network():
+    return render_template('geographic-network.html')
+
 #publication data route
 @app.route('/publication-data')
 def publication_data():
@@ -80,6 +85,31 @@ def api_reuse_data():
         
         return jsonify(df.to_dict('records'))
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ADD THIS: API endpoint for metadata
+@app.route('/api/metadata')
+def api_metadata():
+    try:
+        metadata_path = 'zinepage_metadata.csv'
+        
+        # Check if file exists
+        if not os.path.exists(metadata_path):
+            return jsonify({'error': 'Metadata file not found'}), 404
+        
+        # Read CSV and convert to JSON
+        df = pd.read_csv(metadata_path)
+        
+        # Add debugging info
+        print(f"Metadata loaded: {len(df)} rows, {len(df.columns)} columns")
+        print(f"Columns: {list(df.columns)}")
+        if len(df) > 0:
+            print(f"Sample locations: {df['location'].dropna().unique()[:5] if 'location' in df.columns else 'No location column'}")
+        
+        return jsonify(df.to_dict('records'))
+        
+    except Exception as e:
+        print(f"Error loading metadata: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
