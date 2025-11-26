@@ -28,232 +28,240 @@
         background: #f8f9fa;
         border-radius: 5px;
     }
-    .d3-network-container {
-        width: 100%;
-        height: 700px;
-        margin: 20px 0;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        position: relative;
-    }
-    .d3-controls {
-        margin-bottom: 10px;
-        padding: 10px;
-        background-color: #f8f9fa;
-        border-radius: 5px;
-    }
-    .d3-controls label {
-        margin-right: 15px;
-        font-weight: bold;
-    }
-    .d3-controls input[type="range"] {
-        width: 200px;
-        margin: 0 10px;
-    }
-    .d3-controls select {
-        margin: 0 10px;
-        padding: 5px;
-        border: 1px solid #ccc;
-        border-radius: 3px;
-    }
-    .d3-controls span {
-        font-weight: normal;
-        color: #666;
-    }
-    .d3-controls button {
-        margin-left: 15px;
-        padding: 8px 15px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    .d3-controls button:hover {
-        background-color: #0056b3;
-    }
-    .tooltip {
-        position: absolute;
-        text-align: center;
-        padding: 8px;
-        font-size: 12px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        border: 0px;
-        border-radius: 4px;
-        pointer-events: none;
-        opacity: 0;
-        z-index: 1000;
-    }
-    .node {
-        stroke-width: 2px;
-        cursor: pointer;
-    }
-    .link {
-        stroke-opacity: 0.6;
-    }
-    .legend {
-        margin-top: 20px;
-        padding: 15px;
-        background-color: #f8f9fa;
-        border-radius: 5px;
-    }
-    .legend-section {
-        margin-bottom: 15px;
-    }
-    .legend-item {
-        display: inline-flex;
-        align-items: center;
-        margin-right: 15px;
-        margin-bottom: 8px;
-    }
-    .legend-color {
-        width: 16px;
-        height: 16px;
-        margin-right: 8px;
-        border-radius: 3px;
-    }
-</style>
-
-<div class="container">
-    <h1>Feminist Zine Text Reuse Network Visualization</h1>
-    <p>Interactive network visualization showing text reuse patterns among feminist publications from 1970-1975</p>
-    
-    <h2>Page-Level Network</h2>
-    <div class="d3-controls">
-        <label>Similarity Threshold: 
-            <input type="range" id="similarity-threshold" min="0" max="1" step="0.01" value="0.1">
-            <span id="similarity-value">0.10</span>
-        </label>
-        <label>Filter by Reuse Type:
-            <select id="reuse-type-filter">
-                <option value="all">All Types</option>
-                <option value="minimal_reuse">Minimal Reuse</option>
-                <option value="partial_reuse">Partial Reuse</option>
-                <option value="moderate_reuse">Moderate Reuse</option>
-            </select>
-        </label>
-        <label>Filter by Publication:
-            <select id="publication-filter">
-                <option value="all">All Publications</option>
-            </select>
-        </label>
-        <button id="reset-zoom">Reset Zoom</button>
-    </div>
-    <div id="d3-network" class="d3-network-container"></div>
-    
-    <div class="legend">
-        <div class="legend-section">
-            <h3>Reuse Types (Edge Colors)</h3>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #ff6b6b;"></div>
-                <span>Minimal Reuse</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #4ecdc4;"></div>
-                <span>Partial Reuse</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #45b7d1;"></div>
-                <span>Moderate Reuse</span>
-            </div>
-        </div>
-        
-        <div class="legend-section">
-            <h3>Publications (Node Colors)</h3>
-            <div id="publication-legend" class="publication-legend">
-                <!-- Publication colors will be populated by JavaScript -->
-            </div>
-        </div>
-        
-        <p><strong>Nodes:</strong> Individual page IDs | <strong>Node size:</strong> Number of connections | <strong>Edge thickness:</strong> Similarity strength</p>
-    </div>
-</div>
-
-<script>
-    // Global variables
-    let globalData = null;
-    let networkSvg = null;
-    let simulation = null;
-
-    // Update legend function using the color manager
-    function updateLegend() {
-        fetch('/api/publications')
-            .then(response => response.json())
-            .then(publications => {
-                publications.forEach(pub => {
-                    publicationColorManager.getColor(pub.pub_id, pub.publication_name);
-                });
-                publicationColorManager.populateLegend('publication-legend');
-            })
-            .catch(error => console.error('Error loading publications for legend:', error));
-    }
-
-    // Load and process the data via API
-    d3.json("/api/reuse-data").then(function(data) {
-        globalData = data; // Store for updates
-        
-        // Parse numerical values and dates
-        data.forEach(d => {
-            d.combined_similarity = +d.combined_similarity;
-            d.ngram_similarity = +d.ngram_similarity;
-            d.shingle_similarity = +d.shingle_similarity;
-            d.source_date = new Date(d.source_date);
-            d.target_date = new Date(d.target_date);
-        });
-
-        // Initialize the network
-        createD3PageNetwork(data);
-        setupControls();
-        
-        // Update the legend after data is loaded
-        updateLegend();
-
-    }).catch(function(error) {
-        console.error("Error loading the reuse data:", error);
-        document.querySelector('.container').innerHTML += 
-            '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
-    });
-
-    // ============================================================================
-    // D3.JS PAGE-LEVEL NETWORK 
-    // ============================================================================
-    function createD3PageNetwork(reuse_data, similarityThreshold = 0.1, maxLinksPerNode = 20) {
-        // Clear previous network
-        d3.select("#d3-network").selectAll("*").remove();
-        
-        // Use the publication color manager instead of hardcoded colors
-        function getPublicationColor(publication) {
-            // Try to get pub_id from publication name (you might need to adjust this mapping)
-            const pubId = publication; // Or map publication name to pub_id
-            return publicationColorManager.getColor(pubId, publication);
+        .d3-network-container {
+            width: 100%;
+            height: 700px;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            position: relative;
         }
-
-        console.log(`Using reuse data: ${reuse_data.length} matches`);
+        .d3-controls {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .d3-controls label {
+            margin-right: 15px;
+            font-weight: bold;
+        }
+        .d3-controls input[type="range"] {
+            width: 200px;
+            margin: 0 10px;
+        }
+        .d3-controls select {
+            margin: 0 10px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .d3-controls span {
+            font-weight: normal;
+            color: #666;
+        }
+        .d3-controls button {
+            margin-left: 15px;
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .d3-controls button:hover {
+            background-color: #0056b3;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 0px;
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 1000;
+        }
+        .node {
+            stroke-width: 2px;
+            cursor: pointer;
+        }
+        .link {
+            stroke-opacity: 0.6;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .legend-section {
+            margin-bottom: 15px;
+        }
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 15px;
+            margin-bottom: 8px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        .publication-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Feminist Zine Text Reuse Network Visualization</h1>
+        <p>Interactive network visualization showing text reuse patterns among feminist publications from 1970-1975</p>
         
-        // Apply filters
-        let filteredReuse = applyCurrentFilters(reuse_data);
-
-        // Create nodes from unique page IDs
-        const connectedPageIds = new Set([
-            ...filteredReuse.map(d => d.source_page_id),
-            ...filteredReuse.map(d => d.target_page_id)
-        ]);
+        <h2>Page-Level Network</h2>
+        <div class="d3-controls">
+            <label>Similarity Threshold: 
+                <input type="range" id="similarity-threshold" min="0" max="1" step="0.01" value="0.1">
+                <span id="similarity-value">0.10</span>
+            </label>
+            <label>Filter by Reuse Type:
+                <select id="reuse-type-filter">
+                    <option value="all">All Types</option>
+                    <option value="minimal_reuse">Minimal Reuse</option>
+                    <option value="partial_reuse">Partial Reuse</option>
+                    <option value="moderate_reuse">Moderate Reuse</option>
+                </select>
+            </label>
+            <label>Filter by Publication:
+                <select id="publication-filter">
+                    <option value="all">All Publications</option>
+                </select>
+            </label>
+            <button id="reset-zoom">Reset Zoom</button>
+        </div>
+        <div id="d3-network" class="d3-network-container"></div>
         
-        const nodes = Array.from(connectedPageIds).map(pageId => {
-            // Find a match to get publication info
-            const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
-            const publication = match?.source_page_id === pageId ? 
-                match.source_publication : match.target_publication;
+        <div class="legend">
+            <div class="legend-section">
+                <h3>Reuse Types (Edge Colors)</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                    <span>Minimal Reuse</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #4ecdc4;"></div>
+                    <span>Partial Reuse</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #45b7d1;"></div>
+                    <span>Moderate Reuse</span>
+                </div>
+            </div>
             
-            return {
-                id: pageId,
-                publication: publication,
-                color: getPublicationColor(publication), // Use color manager
-                linkCount: 0, // Will be calculated
-                size: 8 // Base size
-            };
+            <div class="legend-section">
+                <h3>Publications (Node Colors)</h3>
+                <div id="publication-legend" class="publication-legend">
+                    <!-- Publication colors will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <p><strong>Nodes:</strong> Individual page IDs | <strong>Node size:</strong> Number of connections | <strong>Edge thickness:</strong> Similarity strength</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let globalData = null;
+        let networkSvg = null;
+        let simulation = null;
+
+        // Load and process the data via API
+        d3.json("/api/reuse-data").then(function(data) {
+            globalData = data; // Store for updates
+            
+            // Parse numerical values and dates
+            data.forEach(d => {
+                d.combined_similarity = +d.combined_similarity;
+                d.ngram_similarity = +d.ngram_similarity;
+                d.shingle_similarity = +d.shingle_similarity;
+                d.source_date = new Date(d.source_date);
+                d.target_date = new Date(d.target_date);
+            });
+
+            // Initialize the network
+            createD3PageNetwork(data);
+            setupControls();
+
+        }).catch(function(error) {
+            console.error("Error loading the reuse data:", error);
+            document.querySelector('.container').innerHTML += 
+                '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
         });
+
+
+    function updateLegend() {
+    fetch('/api/publications')
+        .then(response => response.json())
+        .then(publications => {
+            publications.forEach(pub => {
+                publicationColorManager.getColor(pub.pub_id, pub.publication_name);
+            });
+            publicationColorManager.populateLegend('publication-legend');
+        });
+}
+
+document.addEventListener('DOMContentLoaded', updateLegend);
+
+
+        // ============================================================================
+        // D3.JS PAGE-LEVEL NETWORK 
+        // ============================================================================
+        function createD3PageNetwork(reuse_data, similarityThreshold = 0.1, maxLinksPerNode = 20) {
+            // Clear previous network
+            d3.select("#d3-network").selectAll("*").remove();
+            
+            // Publication colors - matching index.html
+            const pubColors = {
+                "AintIAWoman": '#e74c3c',        // Red
+                "BigMammaRag": '#3498db',          // Blue
+                "DoitNow": '#2ecc71',              // Green
+                "GoldFlower": '#f39c12',            // Orange
+                "AtalantaVol1No2": '#9b59b6',      // Purple
+                "default": '#95a5a6'                 // Gray for unknown
+            };
+
+            console.log(`Using reuse data: ${reuse_data.length} matches`);
+            
+            // Apply filters
+            let filteredReuse = applyCurrentFilters(reuse_data);
+
+            // Create nodes from unique page IDs
+            const connectedPageIds = new Set([
+                ...filteredReuse.map(d => d.source_page_id),
+                ...filteredReuse.map(d => d.target_page_id)
+            ]);
+            
+            const nodes = Array.from(connectedPageIds).map(pageId => {
+                // Find a match to get publication info
+                const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
+                const publication = match?.source_page_id === pageId ? 
+                    match.source_publication : match.target_publication;
+                
+                return {
+                    id: pageId,
+                    publication: publication,
+                    color: pubColors[publication] || pubColors['default'],
+                    linkCount: 0, // Will be calculated
+                    size: 8 // Base size
+                };
+            });
             
             // Create node lookup
             const nodeMap = new Map(nodes.map(n => [n.id, n]));
@@ -569,4 +577,6 @@
             });
         }
     </script>
+</body>
+</html>
 {% endblock %}
