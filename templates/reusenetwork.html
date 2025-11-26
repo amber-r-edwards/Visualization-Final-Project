@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Reuse Network</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-group label {
+            font-weight: bold;
+            font-size: 12px;
+            color: #555;
+        }
+        
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        
+        #network {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .node {
+            stroke-width: 2px;
+            cursor: pointer;
+        }
+        
+        .link {
+            stroke-opacity: 0.6;
+        }
+        
+        .node-label {
+            font-size: 10px;
+            text-anchor: middle;
+            pointer-events: none;
+            fill: #333;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Text Reuse Network Visualization</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="reuse-type-filter">Filter by Reuse Type:</label>
+                <select id="reuse-type-filter">
+                    <option value="all">All Types</option>
+                    <option value="minimal_reuse">Minimal Reuse</option>
+                    <option value="partial_reuse">Partial Reuse</option>
+                    <option value="moderate_reuse">Moderate Reuse</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="similarity-threshold">Minimum Similarity:</label>
+                <input type="range" id="similarity-threshold" min="0" max="1" step="0.01" value="0">
+                <span id="similarity-value">0.00</span>
+            </div>
+            
+            <div class="control-group">
+                <label for="publication-filter">Filter by Publication:</label>
+                <select id="publication-filter">
+                    <option value="all">All Publications</option>
+                </select>
+            </div>
+            
+            <button id="reset-zoom">Reset Zoom</button>
+        </div>
+        
+        <svg id="network" width="1160" height="600"></svg>
+        
+        <div class="legend">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                <span>Minimal Reuse</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4ecdc4;"></div>
+                <span>Partial Reuse</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #45b7d1;"></div>
+                <span>Moderate Reuse</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #96ceb4;"></div>
+                <span>Node: Publication</span>
+            </div>
+            <p><strong>Node size</strong> represents the number of connections. <strong>Edge thickness</strong> represents similarity strength.</p>
+        </div>
+    </div>
+
+    <script>
+        // Load and process the CSV data
+        d3.csv("../reuse_results/text_reuse_ngrams_windowed_parallel_filtered.csv").then(function(data) {
+            
+            // Parse numerical values
+            data.forEach(d => {
+                d.combined_similarity = +d.combined_similarity;
+                d.ngram_similarity = +d.ngram_similarity;
+                d.shingle_similarity = +d.shingle_similarity;
+                d.source_date = new Date(d.source_date);
+                d.target_date = new Date(d.target_date);
+            });
+
+            // Set up the visualization
+            const svg = d3.select("#network");
+            const width = +svg.attr("width");
+            const height = +svg.attr("height");
+            
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+
+            // Create zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on("zoom", function(event) {
+                    container.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            // Create container for zoomable content
+            const container = svg.append("g");
+
+            // Color scheme for reuse types
+            const colorScale = d3.scaleOrdinal()
+                .domain(["minimal_reuse", "partial_reuse", "moderate_reuse"])
+                .range(["#ff6b6b", "#4ecdc4", "#45b7d1"]);
+
+            let allData = data;
+            let filteredData = data;
+
+            // Extract unique publications for filter dropdown
+            const publications = [...new Set([
+                ...data.map(d => d.source_publication),
+                ...data.map(d => d.target_publication)
+            ])].sort();
+
+            const publicationFilter = d3.select("#publication-filter");
+            publications.forEach(pub => {
+                publicationFilter.append("option")
+                    .attr("value", pub)
+                    .text(pub);
+            });
+
+            // Build network data
+            function buildNetwork(data) {
+                // Create nodes (unique publications)
+                const nodeMap = new Map();
+                
+                data.forEach(d => {
+                    if (!nodeMap.has(d.source_publication)) {
+                        nodeMap.set(d.source_publication, {
+                            id: d.source_publication,
+                            connections: 0
+                        });
+                    }
+                    if (!nodeMap.has(d.target_publication)) {
+                        nodeMap.set(d.target_publication, {
+                            id: d.target_publication,
+                            connections: 0
+                        });
+                    }
+                    
+                    nodeMap.get(d.source_publication).connections++;
+                    nodeMap.get(d.target_publication).connections++;
+                });
+
+                const nodes = Array.from(nodeMap.values());
+
+                // Create links
+                const links = data.map(d => ({
+                    source: d.source_publication,
+                    target: d.target_publication,
+                    similarity: d.combined_similarity,
+                    reuse_type: d.reuse_type,
+                    source_date: d.source_date,
+                    target_date: d.target_date,
+                    shared_content: d.shared_content
+                }));
+
+                return { nodes, links };
+            }
+
+            // Create force simulation
+            function createSimulation(nodes, links) {
+                return d3.forceSimulation(nodes)
+                    .force("link", d3.forceLink(links)
+                        .id(d => d.id)
+                        .distance(d => 200 - (d.similarity * 150))
+                        .strength(d => d.similarity * 0.8)
+                    )
+                    .force("charge", d3.forceManyBody()
+                        .strength(-300)
+                    )
+                    .force("center", d3.forceCenter(width / 2, height / 2))
+                    .force("collision", d3.forceCollide()
+                        .radius(d => Math.max(8, Math.sqrt(d.connections) * 3) + 5)
+                    );
+            }
+
+            // Draw network
+            function drawNetwork(data) {
+                const { nodes, links } = buildNetwork(data);
+                
+                // Clear previous network
+                container.selectAll("*").remove();
+
+                // Create simulation
+                const simulation = createSimulation(nodes, links);
+
+                // Draw links
+                const link = container.append("g")
+                    .selectAll("line")
+                    .data(links)
+                    .enter().append("line")
+                    .attr("class", "link")
+                    .attr("stroke", d => colorScale(d.reuse_type))
+                    .attr("stroke-width", d => Math.max(1, d.similarity * 6))
+                    .on("mouseover", function(event, d) {
+                        tooltip.transition().duration(200).style("opacity", .9);
+                        tooltip.html(`
+                            <strong>${d.source} → ${d.target}</strong><br/>
+                            Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
+                            Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
+                            Source Date: ${d.source_date.toLocaleDateString()}<br/>
+                            Target Date: ${d.target_date.toLocaleDateString()}<br/>
+                            <br/>
+                            Shared Content:<br/>
+                            "${d.shared_content.substring(0, 150)}..."
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function() {
+                        tooltip.transition().duration(500).style("opacity", 0);
+                    });
+
+                // Draw nodes
+                const node = container.append("g")
+                    .selectAll("circle")
+                    .data(nodes)
+                    .enter().append("circle")
+                    .attr("class", "node")
+                    .attr("r", d => Math.max(8, Math.sqrt(d.connections) * 3))
+                    .attr("fill", "#96ceb4")
+                    .attr("stroke", "#333")
+                    .call(d3.drag()
+                        .on("start", dragstarted)
+                        .on("drag", dragged)
+                        .on("end", dragended)
+                    )
+                    .on("mouseover", function(event, d) {
+                        tooltip.transition().duration(200).style("opacity", .9);
+                        tooltip.html(`
+                            <strong>${d.id}</strong><br/>
+                            Connections: ${d.connections}
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function() {
+                        tooltip.transition().duration(500).style("opacity", 0);
+                    });
+
+                // Add node labels
+                const labels = container.append("g")
+                    .selectAll("text")
+                    .data(nodes)
+                    .enter().append("text")
+                    .attr("class", "node-label")
+                    .text(d => d.id);
+
+                // Update positions on simulation tick
+                simulation.on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node
+                        .attr("cx", d => d.x)
+                        .attr("cy", d => d.y);
+
+                    labels
+                        .attr("x", d => d.x)
+                        .attr("y", d => d.y + 4);
+                });
+
+                // Drag functions
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            }
+
+            // Filter functions
+            function applyFilters() {
+                const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
+                const similarityThreshold = +document.getElementById("similarity-threshold").value;
+                const publicationFilter = document.getElementById("publication-filter").value;
+
+                filteredData = allData.filter(d => {
+                    let passes = true;
+                    
+                    if (reuseTypeFilter !== "all") {
+                        passes = passes && d.reuse_type === reuseTypeFilter;
+                    }
+                    
+                    passes = passes && d.combined_similarity >= similarityThreshold;
+                    
+                    if (publicationFilter !== "all") {
+                        passes = passes && (d.source_publication === publicationFilter || 
+                                          d.target_publication === publicationFilter);
+                    }
+                    
+                    return passes;
+                });
+
+                drawNetwork(filteredData);
+            }
+
+            // Event listeners
+            document.getElementById("reuse-type-filter").addEventListener("change", applyFilters);
+            document.getElementById("publication-filter").addEventListener("change", applyFilters);
+            
+            const similaritySlider = document.getElementById("similarity-threshold");
+            const similarityValue = document.getElementById("similarity-value");
+            
+            similaritySlider.addEventListener("input", function() {
+                similarityValue.textContent = (+this.value).toFixed(2);
+                applyFilters();
+            });
+
+            document.getElementById("reset-zoom").addEventListener("click", function() {
+                svg.transition().duration(750).call(
+                    zoom.transform,
+                    d3.zoomIdentity
+                );
+            });
+
+            // Initial draw
+            drawNetwork(filteredData);
+
+        }).catch(function(error) {
+            console.error("Error loading the CSV file:", error);
+            document.querySelector('.container').innerHTML += 
+                '<div style="color: red; padding: 20px;">Error loading data. Please check the file path and format.</div>';
+        });
+    </script>
+</body>
+</html>
