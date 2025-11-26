@@ -14,7 +14,7 @@
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background-color: white;
             padding: 20px;
@@ -58,11 +58,15 @@
             border-radius: 5px;
         }
         
+        .legend-section {
+            margin-bottom: 15px;
+        }
+        
         .legend-item {
             display: inline-flex;
             align-items: center;
-            margin-right: 20px;
-            margin-bottom: 10px;
+            margin-right: 15px;
+            margin-bottom: 8px;
         }
         
         .legend-color {
@@ -70,6 +74,12 @@
             height: 16px;
             margin-right: 8px;
             border-radius: 3px;
+        }
+        
+        .publication-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         #network {
@@ -84,7 +94,7 @@
             color: white;
             border-radius: 5px;
             font-size: 12px;
-            max-width: 300px;
+            max-width: 400px;
             pointer-events: none;
             z-index: 1000;
         }
@@ -99,7 +109,7 @@
         }
         
         .node-label {
-            font-size: 10px;
+            font-size: 9px;
             text-anchor: middle;
             pointer-events: none;
             fill: #333;
@@ -138,27 +148,33 @@
             <button id="reset-zoom">Reset Zoom</button>
         </div>
         
-        <svg id="network" width="1160" height="600"></svg>
+        <svg id="network" width="1360" height="700"></svg>
         
         <div class="legend">
-            <h3>Legend</h3>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #ff6b6b;"></div>
-                <span>Minimal Reuse</span>
+            <div class="legend-section">
+                <h3>Reuse Types</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                    <span>Minimal Reuse</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #4ecdc4;"></div>
+                    <span>Partial Reuse</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #45b7d1;"></div>
+                    <span>Moderate Reuse</span>
+                </div>
             </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #4ecdc4;"></div>
-                <span>Partial Reuse</span>
+            
+            <div class="legend-section">
+                <h3>Publications (Node Colors)</h3>
+                <div id="publication-legend" class="publication-legend">
+                    <!-- Publication colors will be populated by JavaScript -->
+                </div>
             </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #45b7d1;"></div>
-                <span>Moderate Reuse</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: #96ceb4;"></div>
-                <span>Node: Publication</span>
-            </div>
-            <p><strong>Node size</strong> represents the number of connections. <strong>Edge thickness</strong> represents similarity strength.</p>
+            
+            <p><strong>Nodes:</strong> Individual page IDs | <strong>Node size:</strong> Number of connections | <strong>Edge thickness:</strong> Similarity strength</p>
         </div>
     </div>
 
@@ -197,20 +213,22 @@
             // Create container for zoomable content
             const container = svg.append("g");
 
-            // Color scheme for reuse types
-            const colorScale = d3.scaleOrdinal()
+            // Color scheme for reuse types (edges)
+            const reuseTypeColorScale = d3.scaleOrdinal()
                 .domain(["minimal_reuse", "partial_reuse", "moderate_reuse"])
                 .range(["#ff6b6b", "#4ecdc4", "#45b7d1"]);
 
-            let allData = data;
-            let filteredData = data;
-
-            // Extract unique publications for filter dropdown
+            // Get unique publications and create color scale for nodes
             const publications = [...new Set([
                 ...data.map(d => d.source_publication),
                 ...data.map(d => d.target_publication)
             ])].sort();
 
+            // Create color scale for publications (nodes)
+            const publicationColorScale = d3.scaleOrdinal(d3.schemeCategory10)
+                .domain(publications);
+
+            // Populate publication filter dropdown
             const publicationFilter = d3.select("#publication-filter");
             publications.forEach(pub => {
                 publicationFilter.append("option")
@@ -218,40 +236,68 @@
                     .text(pub);
             });
 
-            // Build network data
+            // Create publication legend
+            const publicationLegendContainer = d3.select("#publication-legend");
+            publications.forEach(pub => {
+                const legendItem = publicationLegendContainer.append("div")
+                    .attr("class", "legend-item");
+                
+                legendItem.append("div")
+                    .attr("class", "legend-color")
+                    .style("background-color", publicationColorScale(pub));
+                
+                legendItem.append("span")
+                    .text(pub);
+            });
+
+            let allData = data;
+            let filteredData = data;
+
+            // Build network data using page_id as nodes
             function buildNetwork(data) {
-                // Create nodes (unique publications)
+                // Create nodes (unique page IDs with their publication info)
                 const nodeMap = new Map();
                 
                 data.forEach(d => {
-                    if (!nodeMap.has(d.source_publication)) {
-                        nodeMap.set(d.source_publication, {
-                            id: d.source_publication,
+                    const sourceKey = `${d.source_publication}_${d.source_page_id}`;
+                    const targetKey = `${d.target_publication}_${d.target_page_id}`;
+                    
+                    if (!nodeMap.has(sourceKey)) {
+                        nodeMap.set(sourceKey, {
+                            id: sourceKey,
+                            page_id: d.source_page_id,
+                            publication: d.source_publication,
                             connections: 0
                         });
                     }
-                    if (!nodeMap.has(d.target_publication)) {
-                        nodeMap.set(d.target_publication, {
-                            id: d.target_publication,
+                    if (!nodeMap.has(targetKey)) {
+                        nodeMap.set(targetKey, {
+                            id: targetKey,
+                            page_id: d.target_page_id,
+                            publication: d.target_publication,
                             connections: 0
                         });
                     }
                     
-                    nodeMap.get(d.source_publication).connections++;
-                    nodeMap.get(d.target_publication).connections++;
+                    nodeMap.get(sourceKey).connections++;
+                    nodeMap.get(targetKey).connections++;
                 });
 
                 const nodes = Array.from(nodeMap.values());
 
-                // Create links
+                // Create links - each row is a separate connection
                 const links = data.map(d => ({
-                    source: d.source_publication,
-                    target: d.target_publication,
+                    source: `${d.source_publication}_${d.source_page_id}`,
+                    target: `${d.target_publication}_${d.target_page_id}`,
                     similarity: d.combined_similarity,
                     reuse_type: d.reuse_type,
                     source_date: d.source_date,
                     target_date: d.target_date,
-                    shared_content: d.shared_content
+                    shared_content: d.shared_content,
+                    source_publication: d.source_publication,
+                    target_publication: d.target_publication,
+                    source_page_id: d.source_page_id,
+                    target_page_id: d.target_page_id
                 }));
 
                 return { nodes, links };
@@ -262,15 +308,15 @@
                 return d3.forceSimulation(nodes)
                     .force("link", d3.forceLink(links)
                         .id(d => d.id)
-                        .distance(d => 200 - (d.similarity * 150))
-                        .strength(d => d.similarity * 0.8)
+                        .distance(d => Math.max(50, 300 - (d.similarity * 250))) // Stronger connections = shorter distance
+                        .strength(d => Math.max(0.1, d.similarity * 1.5)) // Similarity affects connection strength
                     )
                     .force("charge", d3.forceManyBody()
-                        .strength(-300)
+                        .strength(d => -200 - (d.connections * 10)) // More connected nodes repel more
                     )
                     .force("center", d3.forceCenter(width / 2, height / 2))
                     .force("collision", d3.forceCollide()
-                        .radius(d => Math.max(8, Math.sqrt(d.connections) * 3) + 5)
+                        .radius(d => Math.max(6, Math.sqrt(d.connections) * 4) + 3)
                     );
             }
 
@@ -290,19 +336,19 @@
                     .data(links)
                     .enter().append("line")
                     .attr("class", "link")
-                    .attr("stroke", d => colorScale(d.reuse_type))
-                    .attr("stroke-width", d => Math.max(1, d.similarity * 6))
+                    .attr("stroke", d => reuseTypeColorScale(d.reuse_type))
+                    .attr("stroke-width", d => Math.max(1, d.similarity * 8)) // Weight by similarity
                     .on("mouseover", function(event, d) {
                         tooltip.transition().duration(200).style("opacity", .9);
                         tooltip.html(`
-                            <strong>${d.source} → ${d.target}</strong><br/>
+                            <strong>${d.source_publication} (Page ${d.source_page_id}) → ${d.target_publication} (Page ${d.target_page_id})</strong><br/>
                             Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
                             Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
                             Source Date: ${d.source_date.toLocaleDateString()}<br/>
                             Target Date: ${d.target_date.toLocaleDateString()}<br/>
                             <br/>
                             Shared Content:<br/>
-                            "${d.shared_content.substring(0, 150)}..."
+                            "${d.shared_content.substring(0, 200)}..."
                         `)
                         .style("left", (event.pageX + 10) + "px")
                         .style("top", (event.pageY - 28) + "px");
@@ -317,8 +363,8 @@
                     .data(nodes)
                     .enter().append("circle")
                     .attr("class", "node")
-                    .attr("r", d => Math.max(8, Math.sqrt(d.connections) * 3))
-                    .attr("fill", "#96ceb4")
+                    .attr("r", d => Math.max(4, Math.sqrt(d.connections) * 3))
+                    .attr("fill", d => publicationColorScale(d.publication))
                     .attr("stroke", "#333")
                     .call(d3.drag()
                         .on("start", dragstarted)
@@ -328,7 +374,8 @@
                     .on("mouseover", function(event, d) {
                         tooltip.transition().duration(200).style("opacity", .9);
                         tooltip.html(`
-                            <strong>${d.id}</strong><br/>
+                            <strong>${d.publication}</strong><br/>
+                            Page ID: ${d.page_id}<br/>
                             Connections: ${d.connections}
                         `)
                         .style("left", (event.pageX + 10) + "px")
@@ -338,13 +385,13 @@
                         tooltip.transition().duration(500).style("opacity", 0);
                     });
 
-                // Add node labels
+                // Add node labels (show page ID)
                 const labels = container.append("g")
                     .selectAll("text")
                     .data(nodes)
                     .enter().append("text")
                     .attr("class", "node-label")
-                    .text(d => d.id);
+                    .text(d => d.page_id);
 
                 // Update positions on simulation tick
                 simulation.on("tick", () => {
@@ -360,7 +407,7 @@
 
                     labels
                         .attr("x", d => d.x)
-                        .attr("y", d => d.y + 4);
+                        .attr("y", d => d.y + 3);
                 });
 
                 // Drag functions
