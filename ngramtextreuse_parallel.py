@@ -1,22 +1,22 @@
 """
-N-grams and Jaccard Similarity Text Reuse Analysis (PARALLEL VERSION)
+N-grams and Jaccard Similarity Text Reuse Analysis (PARALLEL VERSION - NO PANDAS)
 =================================================
 
 This script analyzes text reuse between feminist publications using n-grams 
 and Jaccard similarity, with parallel processing for faster execution.
+Uses only built-in Python modules (no pandas required).
 
 """
 
-import pandas as pd # type: ignore
-import numpy as np
-from datetime import datetime
-import re
-from pathlib import Path
+import csv
 import json
 import os
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Set, Dict, List, Tuple
 from multiprocessing import Pool, cpu_count
-from functools import partial
+from collections import defaultdict, Counter
 
 # ============================================================================
 # TEXT PREPROCESSING AND N-GRAM FUNCTIONS
@@ -24,7 +24,7 @@ from functools import partial
 
 def clean_text(text: str) -> str:
     """Clean and normalize text for n-gram analysis."""
-    if pd.isna(text) or not text:
+    if text is None or not text:
         return ""
     
     text = str(text).lower().strip()
@@ -246,33 +246,79 @@ def create_text_windows(text: str, window_size: int = 200, overlap: int = 50) ->
     
     return windows
 
-def load_and_prepare_metadata(filepath: str = 'zinepage_metadata.csv') -> pd.DataFrame:
-    """Load and prepare metadata for analysis."""
-    metadata = pd.read_csv(filepath)
+def load_csv_data(filepath: str) -> List[Dict]:
+    """
+    Load CSV data into a list of dictionaries.
     
-    # Add page_id if not present
-    if 'page_id' not in metadata.columns:
-        metadata['page_id'] = range(len(metadata))
-        metadata.to_csv(filepath, index=False)
-        print("✅ Added page_id column to page_metadata.csv")
+    Args:
+        filepath: Path to CSV file
+        
+    Returns:
+        List of dictionaries, one per row
+    """
+    data = []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            data.append(row)
+    return data
+
+def save_csv_data(filepath: str, data: List[Dict], fieldnames: List[str] = None):
+    """
+    Save list of dictionaries to CSV.
     
-    # Convert dates
-    metadata['issue_date'] = pd.to_datetime(metadata['issue_date'])
+    Args:
+        filepath: Path to output CSV file
+        data: List of dictionaries to save
+        fieldnames: Optional list of field names (uses keys from first dict if not provided)
+    """
+    if not data:
+        print(f"Warning: No data to save to {filepath}")
+        return
     
-    # Sort by date for directionality
-    metadata = metadata.sort_values('issue_date').reset_index(drop=True)
+    if fieldnames is None:
+        fieldnames = list(data[0].keys())
     
-    # Clean text and calculate lengths
-    metadata['text_clean'] = metadata['text'].apply(clean_text)
-    metadata['text_length'] = metadata['text_clean'].apply(lambda x: len(x.split()))
+    with open(filepath, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(data)
     
-    # Filter out very short texts
-    metadata = metadata[metadata['text_length'] >= 10].copy()
+    print(f"Saved {len(data)} rows to {filepath}")
+
+def load_and_prepare_metadata(filepath: str = None) -> List[Dict]:
+    """
+    Load and prepare metadata.
     
-    print(f"Loaded {len(metadata)} pages from {metadata['publication_name'].nunique()} publications")
-    print(f"Date range: {metadata['issue_date'].min()} to {metadata['issue_date'].max()}")
+    Args:
+        filepath: Path to CSV file with metadata. 
+                  Expected columns: publication_name, page_id, issue_date, text
     
-    return metadata
+    Returns:
+        List of dictionaries with metadata
+    """
+    if filepath is None:
+        # Try common filenames
+        for fname in ['zinepage_metadata.csv', 'metadata.csv', 'data.csv', 'publications.csv']:
+            if os.path.exists(fname):
+                filepath = fname
+                break
+        
+        if filepath is None:
+            raise FileNotFoundError(
+                "No data file specified. Please provide a CSV file with columns: "
+                "publication_name, page_id, issue_date, text"
+            )
+    else:
+        # Expand ~ and environment variables in the path
+        filepath = os.path.expanduser(filepath)
+        filepath = os.path.expandvars(filepath)
+    
+    print(f"Loading metadata from {filepath}...")
+    data = load_csv_data(filepath)
+    print(f"Loaded {len(data)} records")
+    
+    return data
 
 # ============================================================================
 # PARALLEL PROCESSING FUNCTIONS
@@ -294,24 +340,24 @@ def process_comparison_chunk(args):
     results = []
     
     for idx1 in chunk_indices:
-        row1 = working_data.iloc[idx1]
+        row1 = working_data[idx1]
         
         # Compare with all subsequent segments
         for idx2 in range(idx1 + 1, len(working_data)):
-            row2 = working_data.iloc[idx2]
+            row2 = working_data[idx2]
             
             # Skip if same publication and not comparing within same pub
-            if not same_pub and row1['publication'] == row2['publication']:
+            if not same_pub and row1.get('publication_name') == row2.get('publication_name'):
                 continue
             
             # Skip if comparing same page to itself (in windowed mode)
-            if use_windows and row1['page_id'] == row2['page_id']:
+            if use_windows and row1.get('page_id') == row2.get('page_id'):
                 continue
             
             # Calculate similarity
             similarity = calculate_text_similarity(
-                row1['text'],
-                row2['text'],
+                row1.get('text', ''),
+                row2.get('text', ''),
                 ngram_size=ngram_size,
                 shingle_size=shingle_size
             )
@@ -319,12 +365,12 @@ def process_comparison_chunk(args):
             # Only keep if above threshold
             if similarity['combined_similarity'] >= similarity_threshold:
                 result = {
-                    'source_publication': row1['publication'],
-                    'target_publication': row2['publication'],
-                    'source_page_id': row1['page_id'],
-                    'target_page_id': row2['page_id'],
-                    'source_date': row1['date'],
-                    'target_date': row2['date'],
+                    'source_publication': row1.get('publication_name', ''),
+                    'target_publication': row2.get('publication_name', ''),
+                    'source_page_id': row1.get('page_id', ''),
+                    'target_page_id': row2.get('page_id', ''),
+                    'source_date': row1.get('issue_date', ''),
+                    'target_date': row2.get('issue_date', ''),
                     'ngram_similarity': similarity['ngram_similarity'],
                     'shingle_similarity': similarity['shingle_similarity'],
                     'combined_similarity': similarity['combined_similarity'],
@@ -335,23 +381,23 @@ def process_comparison_chunk(args):
                 
                 if use_windows:
                     result.update({
-                        'source_window_id': row1['window_id'],
-                        'target_window_id': row2['window_id'],
-                        'source_combined_id': row1['combined_id'],
-                        'target_combined_id': row2['combined_id'],
-                        'source_start_word': row1['start_word'],
-                        'source_end_word': row1['end_word'],
-                        'target_start_word': row2['start_word'],
-                        'target_end_word': row2['end_word'],
-                        'source_total_page_words': row1['total_page_words'],
-                        'target_total_page_words': row2['total_page_words']
+                        'source_window_id': row1.get('window_id', ''),
+                        'target_window_id': row2.get('window_id', ''),
+                        'source_combined_id': row1.get('combined_id', ''),
+                        'target_combined_id': row2.get('combined_id', ''),
+                        'source_start_word': row1.get('start_word', ''),
+                        'source_end_word': row1.get('end_word', ''),
+                        'target_start_word': row2.get('start_word', ''),
+                        'target_end_word': row2.get('end_word', ''),
+                        'source_total_page_words': row1.get('total_page_words', ''),
+                        'target_total_page_words': row2.get('total_page_words', '')
                     })
                 
                 results.append(result)
     
     return results
 
-def find_text_reuse_windowed(metadata: pd.DataFrame,
+def find_text_reuse_windowed(metadata: List[Dict],
                              similarity_threshold: float = 0.12,
                              ngram_size: int = 4,
                              shingle_size: int = 5,
@@ -359,12 +405,16 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
                              use_windows: bool = True,
                              window_size: int = 200,
                              overlap: int = 50,
-                             n_cores: int = None) -> pd.DataFrame:
+                             n_cores: int = None) -> List[Dict]:
     """
     Find text reuse using parallelization for faster processing.
     
     Args:
+        metadata: List of dictionaries with text data
         n_cores: Number of CPU cores to use. If None, uses all available cores.
+    
+    Returns:
+        List of dictionaries with reuse matches
     """
     print("\n" + "="*70)
     print("TEXT REUSE DETECTION WITH PARALLEL PROCESSING")
@@ -375,29 +425,33 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
         n_cores = cpu_count()
     print(f"Using {n_cores} CPU cores for parallel processing")
     
-    # Prepare data (same as original)
+    # Prepare data
     if use_windows:
         print(f"Creating overlapping windows (size={window_size}, overlap={overlap})...")
         windowed_data = []
-        for idx, row in metadata.iterrows():
-            windows = create_text_windows(row['text'], window_size, overlap)
+        for row in metadata:
+            windows = create_text_windows(row.get('text', ''), window_size, overlap)
             for window in windows:
                 windowed_data.append({
-                    'publication': row['publication'],
-                    'page_id': row['page_id'],
-                    'date': row['date'],
+                    'publication_name': row.get('publication_name', ''),
+                    'page_id': row.get('page_id', ''),
+                    'issue_date': row.get('issue_date', ''),
                     'window_id': window['window_id'],
-                    'combined_id': f"{row['page_id']}_w{window['window_id']}",
+                    'combined_id': f"{row.get('page_id', '')}_w{window['window_id']}",
                     'start_word': window['start_word'],
                     'end_word': window['end_word'],
                     'text': window['text'],
                     'total_page_words': window['total_words']
                 })
-        working_data = pd.DataFrame(windowed_data)
+        working_data = windowed_data
         print(f"Created {len(working_data)} text windows from {len(metadata)} pages")
     else:
-        working_data = metadata.copy()
-        working_data['page_id'] = working_data.index
+        working_data = []
+        for i, row in enumerate(metadata):
+            row_copy = row.copy()
+            if 'page_id' not in row_copy or not row_copy['page_id']:
+                row_copy['page_id'] = str(i)
+            working_data.append(row_copy)
     
     print(f"Threshold: {similarity_threshold}")
     print(f"N-gram size: {ngram_size}")
@@ -410,7 +464,6 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
     print(f"Total pairwise comparisons: {total_comparisons:,}")
     
     # Divide work into chunks for parallel processing
-    # Each chunk is a set of indices for the outer loop
     indices = list(range(len(working_data)))
     chunk_size = max(1, len(indices) // (n_cores * 4))  # Create more chunks than cores for better load balancing
     chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
@@ -435,13 +488,13 @@ def find_text_reuse_windowed(metadata: pd.DataFrame,
     
     print(f"Matches found: {len(results)}")
     
-    return pd.DataFrame(results)
+    return results
 
 # ============================================================================
 # ANALYSIS AND CLASSIFICATION
 # ============================================================================
 
-def classify_reuse_type(row):
+def classify_reuse_type(row: Dict) -> str:
     """Classify the type of text reuse based on similarity scores."""
     combined_sim = row['combined_similarity']
     ngram_sim = row['ngram_similarity']
@@ -456,84 +509,120 @@ def classify_reuse_type(row):
     else:
         return 'minimal_reuse'
 
-def filter_boilerplate(reuse_df: pd.DataFrame, min_occurrences: int = 5) -> pd.DataFrame:
+def filter_boilerplate(reuse_data: List[Dict], min_occurrences: int = 5) -> List[Dict]:
     """
     Improved boilerplate filtering: removes specific repeated content, not entire pairs
     """
-    if len(reuse_df) == 0:
-        return reuse_df
+    if len(reuse_data) == 0:
+        return reuse_data
     
     print("\n" + "="*70)
     print("BOILERPLATE FILTERING")
     print("="*70)
     
-    original_count = len(reuse_df)
+    original_count = len(reuse_data)
     
     # Stage 1: Remove very short shared content
     min_words = 10
-    short_content = reuse_df['shared_content'].apply(lambda x: len(x.split()) < min_words)
-    reuse_df = reuse_df[~short_content].copy()
-    print(f"Stage 1: Removed {short_content.sum()} matches with <{min_words} words")
+    filtered_data = []
+    short_count = 0
+    
+    for row in reuse_data:
+        if len(row['shared_content'].split()) >= min_words:
+            filtered_data.append(row)
+        else:
+            short_count += 1
+    
+    print(f"Stage 1: Removed {short_count} matches with <{min_words} words")
     
     # Stage 2: Identify repeated content
-    content_counts = reuse_df['shared_content'].value_counts()
+    content_counts = Counter(row['shared_content'] for row in filtered_data)
+    
     print(f"\nTop 10 most frequent shared content pieces:")
-    for content, count in content_counts.head(10).items():
+    for content, count in content_counts.most_common(10):
         print(f"  [{count}x] {content[:100]}...")
     
     # Only remove if appears 5+ times
-    frequent_content = content_counts[content_counts >= min_occurrences].index
-    is_boilerplate = reuse_df['shared_content'].isin(frequent_content)
+    frequent_content = {content for content, count in content_counts.items() if count >= min_occurrences}
+    
+    result = []
+    boilerplate_count = 0
+    for row in filtered_data:
+        if row['shared_content'] not in frequent_content:
+            result.append(row)
+        else:
+            boilerplate_count += 1
     
     print(f"\nStage 2: Identified {len(frequent_content)} pieces appearing {min_occurrences}+ times")
-    print(f"  Removing {is_boilerplate.sum()} boilerplate matches")
-    
-    reuse_df = reuse_df[~is_boilerplate].copy()
+    print(f"  Removing {boilerplate_count} boilerplate matches")
     
     print(f"\nFiltering summary:")
     print(f"  Started with: {original_count}")
-    print(f"  Removed short: {short_content.sum()}")
-    print(f"  Removed boilerplate: {is_boilerplate.sum()}")
-    print(f"  Final count: {len(reuse_df)}")
+    print(f"  Removed short: {short_count}")
+    print(f"  Removed boilerplate: {boilerplate_count}")
+    print(f"  Final count: {len(result)}")
     print("="*70)
     
-    return reuse_df
+    return result
 
-def create_review_sample(reuse_df: pd.DataFrame, metadata: pd.DataFrame, sample_size: int = 50) -> pd.DataFrame:
-    """Create a sample for manual review (now simplified since context is already in main results)."""
-    # Sample across different similarity ranges
-    high_sim = reuse_df[reuse_df['combined_similarity'] > 0.5]
-    med_sim = reuse_df[(reuse_df['combined_similarity'] > 0.25) & (reuse_df['combined_similarity'] <= 0.5)]
-    low_sim = reuse_df[reuse_df['combined_similarity'] <= 0.25]
+def create_review_sample(reuse_data: List[Dict], sample_size: int = 50) -> List[Dict]:
+    """Create a sample for manual review."""
+    import random
+    
+    # Separate by similarity ranges
+    high_sim = [r for r in reuse_data if r['combined_similarity'] > 0.5]
+    med_sim = [r for r in reuse_data if 0.25 < r['combined_similarity'] <= 0.5]
+    low_sim = [r for r in reuse_data if r['combined_similarity'] <= 0.25]
     
     # Sample from each range
-    sample_high = high_sim.sample(min(len(high_sim), sample_size // 3)) if len(high_sim) > 0 else pd.DataFrame()
-    sample_med = med_sim.sample(min(len(med_sim), sample_size // 3)) if len(med_sim) > 0 else pd.DataFrame()
-    sample_low = low_sim.sample(min(len(low_sim), sample_size // 3)) if len(low_sim) > 0 else pd.DataFrame()
-    
-    # Combine samples
-    review_sample = pd.concat([sample_high, sample_med, sample_low], ignore_index=True)
+    sample = []
+    for sim_range in [high_sim, med_sim, low_sim]:
+        if len(sim_range) > 0:
+            n_samples = min(len(sim_range), sample_size // 3)
+            sample.extend(random.sample(sim_range, n_samples))
     
     # Add empty columns for manual review
-    review_sample['manual_review_notes'] = ''
-    review_sample['verified_reuse_type'] = ''
+    for row in sample:
+        row['manual_review_notes'] = ''
+        row['verified_reuse_type'] = ''
     
-    return review_sample
+    return sample
+
+def calculate_statistics(reuse_data: List[Dict]) -> Dict:
+    """Calculate summary statistics from reuse data."""
+    if not reuse_data:
+        return {}
+    
+    combined_sims = [r['combined_similarity'] for r in reuse_data]
+    ngram_sims = [r['ngram_similarity'] for r in reuse_data]
+    shingle_sims = [r['shingle_similarity'] for r in reuse_data]
+    shared_lengths = [len(r['shared_content'].split()) for r in reuse_data]
+    
+    return {
+        'count': len(reuse_data),
+        'avg_combined_sim': sum(combined_sims) / len(combined_sims),
+        'avg_ngram_sim': sum(ngram_sims) / len(ngram_sims),
+        'avg_shingle_sim': sum(shingle_sims) / len(shingle_sims),
+        'max_combined_sim': max(combined_sims),
+        'min_combined_sim': min(combined_sims),
+        'avg_shared_length': sum(shared_lengths) / len(shared_lengths)
+    }
 
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
-def main(n_cores=None):
+def main(data_filepath: str = None, n_cores: int = None):
     """
     Main execution function.
     
     Args:
+        data_filepath: Path to input CSV file
         n_cores: Number of CPU cores to use. If None, uses all available cores.
     """
     print("="*70)
     print("N-GRAMS AND JACCARD SIMILARITY TEXT REUSE ANALYSIS (PARALLEL)")
-    print("Feminist Publications 1973-1974")
+    print("Feminist Publications 1970-1975")
     print("="*70)
     
     # Configuration
@@ -548,7 +637,7 @@ def main(n_cores=None):
     print(f"Created output directory: {output_dir}")
 
     # Load data
-    metadata = load_and_prepare_metadata()
+    metadata = load_and_prepare_metadata(data_filepath)
     
     # Run analysis with parallel processing
     if USE_WINDOWS:
@@ -575,7 +664,8 @@ def main(n_cores=None):
         return
     
     # Classify reuse types
-    reuse_results['reuse_type'] = reuse_results.apply(classify_reuse_type, axis=1)
+    for row in reuse_results:
+        row['reuse_type'] = classify_reuse_type(row)
     
     # Filter boilerplate
     reuse_filtered = filter_boilerplate(reuse_results)
@@ -584,14 +674,14 @@ def main(n_cores=None):
     results_file = os.path.join(output_dir, f'text_reuse_ngrams_{analysis_suffix}.csv')
     filtered_file = os.path.join(output_dir, f'text_reuse_ngrams_{analysis_suffix}_filtered.csv')
     
-    reuse_results.to_csv(results_file, index=False)
-    reuse_filtered.to_csv(filtered_file, index=False)
+    save_csv_data(results_file, reuse_results)
+    save_csv_data(filtered_file, reuse_filtered)
     
     # Create review sample
     if len(reuse_filtered) > 0:
-        review_sample = create_review_sample(reuse_filtered, metadata)
+        review_sample = create_review_sample(reuse_filtered)
         review_file = os.path.join(output_dir, f'text_reuse_ngrams_{analysis_suffix}_review.csv')
-        review_sample.to_csv(review_file, index=False)
+        save_csv_data(review_file, review_sample)
     
     # Summary statistics
     print("\n" + "="*50)
@@ -601,25 +691,29 @@ def main(n_cores=None):
     print(f"After filtering: {len(reuse_filtered)}")
     
     if len(reuse_filtered) > 0:
+        # Count reuse types
+        reuse_type_counts = Counter(r['reuse_type'] for r in reuse_filtered)
         print("\nReuse type distribution:")
-        print(reuse_filtered['reuse_type'].value_counts())
+        for reuse_type, count in reuse_type_counts.most_common():
+            print(f"  {reuse_type}: {count}")
         
+        # Calculate statistics
+        stats = calculate_statistics(reuse_filtered)
         print(f"\nSimilarity statistics:")
-        print(f"Average combined similarity: {reuse_filtered['combined_similarity'].mean():.3f}")
-        print(f"Average n-gram similarity: {reuse_filtered['ngram_similarity'].mean():.3f}")
-        print(f"Average shingle similarity: {reuse_filtered['shingle_similarity'].mean():.3f}")
-        
-        print(f"Max combined similarity: {reuse_filtered['combined_similarity'].max():.3f}")
-        print(f"Min combined similarity: {reuse_filtered['combined_similarity'].min():.3f}")
-        
-        # Show shared content statistics
-        avg_shared_length = reuse_filtered['shared_content'].apply(lambda x: len(x.split())).mean()
-        print(f"Average shared content length: {avg_shared_length:.1f} words")
+        print(f"Average combined similarity: {stats['avg_combined_sim']:.3f}")
+        print(f"Average n-gram similarity: {stats['avg_ngram_sim']:.3f}")
+        print(f"Average shingle similarity: {stats['avg_shingle_sim']:.3f}")
+        print(f"Max combined similarity: {stats['max_combined_sim']:.3f}")
+        print(f"Min combined similarity: {stats['min_combined_sim']:.3f}")
+        print(f"Average shared content length: {stats['avg_shared_length']:.1f} words")
         
         # Window-specific stats if applicable
         if USE_WINDOWS:
-            unique_page_pairs = reuse_filtered[['source_page_id', 'target_page_id']].drop_duplicates()
-            print(f"Unique page pairs with reuse: {len(unique_page_pairs)}")
+            unique_pairs = set()
+            for row in reuse_filtered:
+                pair = (row['source_page_id'], row['target_page_id'])
+                unique_pairs.add(pair)
+            print(f"Unique page pairs with reuse: {len(unique_pairs)}")
     
     # Summary of outputs
     print(f"\n" + "="*50)
@@ -635,13 +729,18 @@ def main(n_cores=None):
 if __name__ == "__main__":
     import sys
     
-    # Allow specifying number of cores as command line argument
-    n_cores = None
+    # Parse command line arguments
+    data_filepath = "zinepage_metadata.csv"
+    n_cores = 8
+    
     if len(sys.argv) > 1:
+        data_filepath = sys.argv[1]
+    
+    if len(sys.argv) > 2:
         try:
-            n_cores = int(sys.argv[1])
+            n_cores = int(sys.argv[2])
             print(f"Using {n_cores} cores as specified in command line")
         except ValueError:
-            print(f"Invalid number of cores: {sys.argv[1]}, using all available cores")
+            print(f"Invalid number of cores: {sys.argv[2]}, using all available cores")
     
-    main(n_cores=n_cores)
+    main(data_filepath=data_filepath, n_cores=n_cores)
