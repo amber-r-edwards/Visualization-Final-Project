@@ -31,12 +31,12 @@ def index():
 #page-level reuse map route
 @app.route('/reuse-map')
 def reuse_map():
-    return render_template('reuse_map.html')
+    return render_template('reusemap.html')
 
 #page-level reuse network route
 @app.route('/reuse-network') 
 def reuse_network():
-    return render_template('reuse_network.html')
+    return render_template('reusenetwork.html')
 
 #publication data route
 @app.route('/publication-data')
@@ -56,6 +56,29 @@ def api_publications():
         conn.close()
         
         return jsonify(publications)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+# API endpoint for reuse network data
+@app.route('/api/reuse-data')
+def api_reuse_data():
+    try:
+        reuse_data_path = 'reuse_results/text_reuse_ngrams_windowed_parallel_filtered.csv'
+        
+        # Check if file exists
+        if not os.path.exists(reuse_data_path):
+            return jsonify({'error': 'Reuse data file not found'}), 404
+        
+        # Read CSV and convert to JSON
+        df = pd.read_csv(reuse_data_path)
+        
+        # Convert dates to string format for JSON serialization
+        if 'source_date' in df.columns:
+            df['source_date'] = pd.to_datetime(df['source_date']).dt.strftime('%Y-%m-%d')
+        if 'target_date' in df.columns:
+            df['target_date'] = pd.to_datetime(df['target_date']).dt.strftime('%Y-%m-%d')
+        
+        return jsonify(df.to_dict('records'))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
