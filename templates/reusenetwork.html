@@ -163,10 +163,10 @@
     </div>
 
     <script>
-        // Load and process the CSV data
-        d3.csv("../reuse_results/text_reuse_ngrams_windowed_parallel_filtered.csv").then(function(data) {
+        // Load and process the data via API
+        d3.json("/api/reuse-data").then(function(data) {
             
-            // Parse numerical values
+            // Parse numerical values and dates
             data.forEach(d => {
                 d.combined_similarity = +d.combined_similarity;
                 d.ngram_similarity = +d.ngram_similarity;
@@ -431,9 +431,9 @@
             drawNetwork(filteredData);
 
         }).catch(function(error) {
-            console.error("Error loading the CSV file:", error);
+            console.error("Error loading the reuse data:", error);
             document.querySelector('.container').innerHTML += 
-                '<div style="color: red; padding: 20px;">Error loading data. Please check the file path and format.</div>';
+                '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
         });
     </script>
 </body>
