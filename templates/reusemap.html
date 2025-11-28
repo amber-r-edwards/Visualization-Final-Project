@@ -197,6 +197,7 @@
     let globalMetadata = null;
     let geoSvg = null;
     let geoZoom = null;
+    let pubLookupById = {}; // Add this line
 
     // City coordinates (expanded for 1970-1975 data)
     const cityCoordinates = {
@@ -567,9 +568,20 @@
                 .attr("r", d => Math.max(8, Math.min(25, d.pageCount * 2)))
                 .attr("fill", d => {
                     const pubs = Array.from(d.publications);
-                    // Use the proper publication name, not pub_id
+                    // Get the pub_id for the primary publication
                     const primaryPub = pubs[0];
-                    return publicationColorManager.getColor(primaryPub);
+    
+                    // Find the pub_id for this publication name from our metadata
+                    let pubId = null;
+                    for (const [pageId, pageInfo] of Object.entries(pubLookupById)) {
+                        if (pageInfo.publication_name === primaryPub) {
+                            pubId = pageInfo.pub_id;
+                            break;
+                        }
+                    }
+    
+                    // Use pub_id to get color, fallback to name if needed
+                    return pubId ? publicationColorManager.getColorById(pubId) : publicationColorManager.getColor(primaryPub);
                 })
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 2)
@@ -700,7 +712,7 @@
             
            // Process the data
 // 1. Create publication lookup using pub_id instead of publication_name
-const pubLookupById = {};
+pubLookupById = {}; // Use the global variable instead of const
 pageMetadata.forEach(page => {
     pubLookupById[page.page_id] = {
         publication_name: page.publication_name,
