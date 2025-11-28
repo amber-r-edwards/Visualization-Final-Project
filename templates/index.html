@@ -43,11 +43,11 @@
     
     <!-- Right Column - Geographic Map -->
     <div class="content-viz">
-        <h2 style="margin-bottom: 1rem; color: #555;">Geographic Distribution of Publications</h2>
+        <h2 style="margin-bottom: 1rem; color: #484747;">Geographic Distribution of Publications</h2>
         
         <!-- Year Filter Controls -->
-        <div style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 5px;">
-            <h4 style="margin: 0 0 0.5rem 0; color: #555;">Filter by Year Range</h4>
+        <div style="margin-bottom: 1rem; padding: 1rem; background: #e0e0e0; border-radius: 5px;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #484747;">Filter by Year Range</h4>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <label style="font-weight: bold;">Start Year:</label>
                 <input type="range" id="startYear" min="1970" max="1997" value="1970" 
@@ -59,7 +59,7 @@
                        style="flex: 1;" oninput="updateYearFilter()">
                 <span id="endYearValue">1997</span>
                 
-                <button onclick="resetYearFilter()" style="padding: 0.25rem 0.5rem; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Reset</button>
+                <button onclick="resetYearFilter()" style="padding: 0.25rem 0.5rem; background: #df4aad; color: white; border: none; border-radius: 3px; cursor: pointer;">Reset</button>
             </div>
             <div style="margin-top: 0.5rem; font-size: 0.9em; color: #666;">
                 Showing <span id="filteredCount">29</span> of 29 publications
