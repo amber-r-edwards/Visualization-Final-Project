@@ -793,86 +793,108 @@
                 throw new Error('No reuse data found in CSV');
             }
             
-            // Process the data
-            // 1. Create publication lookup from page metadata
-            const pubLookup = {};
-            pageMetadata.forEach(page => {
-                pubLookup[page.page_id] = page.publication_name;
-            });
-            
-            // 2. Process reuse data and add publication names
-            const processedReuseData = reuseData.map(d => {
-                // Get publication names from page metadata
-                const sourcePub = pubLookup[d.source_page_id] || 'Unknown';
-                const targetPub = pubLookup[d.target_page_id] || 'Unknown';
-                
-                // Determine reuse type based on similarity score
-                const similarity = +d.combined_similarity;
-                let reuseType;
-                if (similarity < 0.3) {
-                    reuseType = 'minimal_reuse';
-                } else if (similarity < 0.7) {
-                    reuseType = 'partial_reuse';
-                } else {
-                    reuseType = 'moderate_reuse';
-                }
-                
-                return {
-                    source_page_id: d.source_page_id,
-                    target_page_id: d.target_page_id,
-                    combined_similarity: +d.combined_similarity,
-                    ngram_similarity: +(d.ngram_similarity || 0),
-                    shingle_similarity: +(d.shingle_similarity || 0),
-                    source_publication: sourcePub,
-                    target_publication: targetPub,
-                    source_date: d.source_date || '',
-                    target_date: d.target_date || '',
-                    reuse_type: reuseType,
-                    shared_content: d.shared_content || ''
-                };
-            });
-            
-            // Replace the combinedMetadata creation section with this:
-            const combinedMetadata = pageMetadata.map(page => {
-                // Find matching publication metadata by publication_name
-                const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
-                
-                return {
-                    page_id: page.page_id,
-                    publication_name: page.publication_name,
-                    volume: page.volume || '',
-                    number: page.number || '',
-                    page_number: page.page_number || '',
-                    organization: pubData.organization || '',
-                    location: pubData.location || '', // Location comes from publication metadata
-                    region: pubData.region || '',
-                    notes: pubData.notes || ''
-                };
-            });
-            
-            // Updated debugging to verify the fix:
-            console.log('=== LOCATION DEBUGGING (FIXED) ===');
-            console.log('Sample combined metadata with locations:', 
-                combinedMetadata.filter(p => p.location).slice(0, 5).map(p => ({ 
-                    page_id: p.page_id, 
-                    location: p.location, 
-                    pub: p.publication_name 
-                }))
-            );
-            console.log('Total pages with locations after combining:', 
-                combinedMetadata.filter(p => p.location).length);
-            
-            // Check if publication names match between datasets
-            const pagePublications = [...new Set(pageMetadata.map(p => p.publication_name))];
-            const pubPublications = [...new Set(pubMetadata.map(p => p.publication_name))];
-            console.log('Publication names in page metadata:', pagePublications);
-            console.log('Publication names in pub metadata:', pubPublications);
-            
-            const matchingPubs = pagePublications.filter(pub => pubPublications.includes(pub));
-            const missingPubs = pagePublications.filter(pub => !pubPublications.includes(pub));
-            console.log('Matching publications:', matchingPubs.length);
-            console.log('Missing from pub metadata:', missingPubs);
-            console.log('=== END DEBUGGING ===');
+           // Process the data
+// 1. Create publication lookup using pub_id instead of publication_name
+const pubLookupById = {};
+pageMetadata.forEach(page => {
+    pubLookupById[page.page_id] = {
+        publication_name: page.publication_name,
+        pub_id: page.pub_id
+    };
+});
+
+// 2. Create publication metadata lookup by pub_id
+const pubMetadataLookup = {};
+pubMetadata.forEach(pub => {
+    pubMetadataLookup[pub.pub_id] = pub;
+});
+
+console.log('Publication metadata lookup created with pub_ids:', Object.keys(pubMetadataLookup));
+console.log('Sample page with pub_id:', pageMetadata.slice(0, 3).map(p => ({
+    page_id: p.page_id,
+    pub_id: p.pub_id,
+    publication_name: p.publication_name
+})));
+
+// 3. Process reuse data and add publication names using pub_id
+const processedReuseData = reuseData.map(d => {
+    // Get publication info from page metadata using pub_id
+    const sourcePageInfo = pubLookupById[d.source_page_id];
+    const targetPageInfo = pubLookupById[d.target_page_id];
+    
+    const sourcePub = sourcePageInfo ? sourcePageInfo.publication_name : 'Unknown';
+    const targetPub = targetPageInfo ? targetPageInfo.publication_name : 'Unknown';
+    
+    // Determine reuse type based on similarity score
+    const similarity = +d.combined_similarity;
+    let reuseType;
+    if (similarity < 0.3) {
+        reuseType = 'minimal_reuse';
+    } else if (similarity < 0.7) {
+        reuseType = 'partial_reuse';
+    } else {
+        reuseType = 'moderate_reuse';
+    }
+    
+    return {
+        source_page_id: d.source_page_id,
+        target_page_id: d.target_page_id,
+        combined_similarity: +d.combined_similarity,
+        ngram_similarity: +(d.ngram_similarity || 0),
+        shingle_similarity: +(d.shingle_similarity || 0),
+        source_publication: sourcePub,
+        target_publication: targetPub,
+        source_date: d.source_date || '',
+        target_date: d.target_date || '',
+        reuse_type: reuseType,
+        shared_content: d.shared_content || ''
+    };
+});
+
+// 4. Combine page and publication metadata using pub_id
+const combinedMetadata = pageMetadata.map(page => {
+    // Get publication metadata using pub_id
+    const pubData = pubMetadataLookup[page.pub_id] || {};
+    
+    return {
+        page_id: page.page_id,
+        pub_id: page.pub_id,
+        publication_name: page.publication_name,
+        volume: page.volume || '',
+        number: page.number || '',
+        page_number: page.page_number || '',
+        organization: pubData.organization || '',
+        location: pubData.location || '', // Location from publication metadata via pub_id
+        region: pubData.region || '',
+        notes: pubData.notes || ''
+    };
+});
+
+// Updated debugging to verify the pub_id matching:
+console.log('=== PUB_ID MATCHING DEBUGGING ===');
+console.log('Total pages:', pageMetadata.length);
+console.log('Total pub metadata entries:', pubMetadata.length);
+console.log('Pages with pub_id:', pageMetadata.filter(p => p.pub_id).length);
+console.log('Pub metadata entries with pub_id:', pubMetadata.filter(p => p.pub_id).length);
+
+console.log('Sample combined metadata with locations:', 
+    combinedMetadata.filter(p => p.location).slice(0, 5).map(p => ({ 
+        page_id: p.page_id,
+        pub_id: p.pub_id,
+        location: p.location, 
+        publication_name: p.publication_name 
+    }))
+);
+console.log('Total pages with locations after pub_id matching:', 
+    combinedMetadata.filter(p => p.location).length);
+
+// Check pub_id matching success
+const successfulMatches = combinedMetadata.filter(p => p.location).length;
+const totalPages = combinedMetadata.length;
+console.log(`Location matching success rate: ${successfulMatches}/${totalPages} (${((successfulMatches/totalPages)*100).toFixed(1)}%)`);
+
+console.log('Available city coordinates:', Object.keys(cityCoordinates));
+console.log('=== END DEBUGGING ===');
             
             // Store globally for use by other functions
             globalReuseData = processedReuseData;
