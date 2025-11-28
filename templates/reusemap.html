@@ -260,21 +260,44 @@
     // Function to populate publication legend manually
     function populatePublicationLegend() {
         const publicationLegendContainer = document.getElementById('publication-legend');
-        if (publicationLegendContainer) {
-            publicationLegendContainer.innerHTML = '';
-            
-            // Show all publications except "Unknown"
-            Object.entries(publicationColorManager.publications).forEach(([name, data]) => {
-                if (name !== "Unknown") {
-                    const legendItem = document.createElement('div');
-                    legendItem.className = 'legend-item';
-                    legendItem.innerHTML = `
-                        <span class="legend-color" style="background-color: ${data.color}"></span>
-                        <span class="legend-label">${name}</span>
-                    `;
-                    publicationLegendContainer.appendChild(legendItem);
+        if (!publicationLegendContainer || !globalMetadata) return;
+    
+        publicationLegendContainer.innerHTML = '';
+    
+        // Get unique publications that are actually in the current filtered data
+        const visiblePublications = [...new Set(globalMetadata
+            .filter(page => page.location && cityCoordinates[page.location]) // Only pages with valid locations
+            .map(page => page.publication_name)
+            .filter(Boolean)
+        )].sort();
+    
+        console.log('Publications visible on map:', visiblePublications);
+    
+        // Show only the publications that are visible on the map
+        visiblePublications.forEach(pubName => {
+            // Get pub_id for this publication name
+            let pubId = null;
+            for (const [pageId, pageInfo] of Object.entries(pubLookupById)) {
+                if (pageInfo.publication_name === pubName) {
+                    pubId = pageInfo.pub_id;
+                    break;
                 }
-            });
+            }
+        
+            // Get color using pub_id
+            const color = pubId ? publicationColorManager.getColorById(pubId) : publicationColorManager.getColor(pubName);
+        
+            const legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            legendItem.innerHTML = `
+                <span class="legend-color" style="background-color: ${color}"></span>
+                <span class="legend-label">${pubName}</span>
+            `;
+            publicationLegendContainer.appendChild(legendItem);
+        });
+    
+        if (visiblePublications.length === 0) {
+            publicationLegendContainer.innerHTML = '<div style="color: #666; font-style: italic;">No publications with valid locations</div>';
         }
     }
 
@@ -694,6 +717,8 @@
     function updateGeoNetwork() {
         if (!globalReuseData || !globalMetadata) return;
         createGeographicNetwork(globalReuseData, globalMetadata);
+        // Update the legend to show only visible publications
+        populatePublicationLegend();
     }
 
     function populatePublicationFilter(metadata) {
@@ -824,7 +849,7 @@
             
             // Populate the publication legend
             populatePublicationLegend();
-            
+
         }).catch(function(error) {
             console.error("Error loading CSV data:", error);
             document.getElementById('loading').innerHTML = 
