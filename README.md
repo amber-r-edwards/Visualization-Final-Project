@@ -87,4 +87,3 @@ Flask==2.3.3
 - **Database**: Searchable interface for publication metadata
 
 Each visualization includes interactive filters and controls for exploring different aspects of the data.
-```
