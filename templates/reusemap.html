@@ -832,49 +832,47 @@
                 };
             });
             
-            // 3. Combine page and publication metadata - FIXED VERSION
-const combinedMetadata = pageMetadata.map(page => {
-    // Find matching publication metadata
-    const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
-    
-    return {
-        page_id: page.page_id,
-        publication_name: page.publication_name,
-        volume: page.volume || '',
-        number: page.number || '',
-        page_number: page.page_number || '',
-        organization: pubData.organization || '',
-        location: pubData.location || page.location || '', // Try both sources for location
-        region: pubData.region || '',
-        notes: pubData.notes || '',
-        issue_date: page.issue_date || page.date || '' // Add date field
-    };
-});
-
-// Add this debugging right after the combinedMetadata creation:
-console.log('=== LOCATION DEBUGGING ===');
-console.log('Sample page metadata locations:', pageMetadata.slice(0, 5).map(p => ({ 
-    page_id: p.page_id, 
-    location: p.location, 
-    pub: p.publication_name 
-})));
-console.log('Sample pub metadata locations:', pubMetadata.slice(0, 5).map(p => ({ 
-    pub: p.publication_name, 
-    location: p.location 
-})));
-console.log('Sample combined metadata locations:', combinedMetadata.slice(0, 5).map(p => ({ 
-    page_id: p.page_id, 
-    location: p.location, 
-    pub: p.publication_name 
-})));
-console.log('Available city coordinates:', Object.keys(cityCoordinates));
-
-// Check which source has the location data
-const pageLocations = pageMetadata.filter(p => p.location).length;
-const pubLocations = pubMetadata.filter(p => p.location).length;
-console.log(`Page metadata with locations: ${pageLocations}/${pageMetadata.length}`);
-console.log(`Pub metadata with locations: ${pubLocations}/${pubMetadata.length}`);
-console.log('=== END DEBUGGING ===');
+            // Replace the combinedMetadata creation section with this:
+            const combinedMetadata = pageMetadata.map(page => {
+                // Find matching publication metadata by publication_name
+                const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
+                
+                return {
+                    page_id: page.page_id,
+                    publication_name: page.publication_name,
+                    volume: page.volume || '',
+                    number: page.number || '',
+                    page_number: page.page_number || '',
+                    organization: pubData.organization || '',
+                    location: pubData.location || '', // Location comes from publication metadata
+                    region: pubData.region || '',
+                    notes: pubData.notes || ''
+                };
+            });
+            
+            // Updated debugging to verify the fix:
+            console.log('=== LOCATION DEBUGGING (FIXED) ===');
+            console.log('Sample combined metadata with locations:', 
+                combinedMetadata.filter(p => p.location).slice(0, 5).map(p => ({ 
+                    page_id: p.page_id, 
+                    location: p.location, 
+                    pub: p.publication_name 
+                }))
+            );
+            console.log('Total pages with locations after combining:', 
+                combinedMetadata.filter(p => p.location).length);
+            
+            // Check if publication names match between datasets
+            const pagePublications = [...new Set(pageMetadata.map(p => p.publication_name))];
+            const pubPublications = [...new Set(pubMetadata.map(p => p.publication_name))];
+            console.log('Publication names in page metadata:', pagePublications);
+            console.log('Publication names in pub metadata:', pubPublications);
+            
+            const matchingPubs = pagePublications.filter(pub => pubPublications.includes(pub));
+            const missingPubs = pagePublications.filter(pub => !pubPublications.includes(pub));
+            console.log('Matching publications:', matchingPubs.length);
+            console.log('Missing from pub metadata:', missingPubs);
+            console.log('=== END DEBUGGING ===');
             
             // Store globally for use by other functions
             globalReuseData = processedReuseData;
