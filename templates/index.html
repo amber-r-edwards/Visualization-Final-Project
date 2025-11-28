@@ -55,9 +55,9 @@
                 <span id="startYearValue">1970</span>
                 
                 <label style="font-weight: bold;">End Year:</label>
-                <input type="range" id="endYear" min="1970" max="1997" value="1997" 
+                <input type="range" id="endYear" min="1970" max="1997" value="1975" 
                        style="flex: 1;" oninput="updateYearFilter()">
-                <span id="endYearValue">1997</span>
+                <span id="endYearValue">1975</span>
                 
                 <button onclick="resetYearFilter()" style="padding: 0.25rem 0.5rem; background: #df4aad; color: white; border: none; border-radius: 3px; cursor: pointer;">Reset</button>
             </div>
@@ -257,6 +257,10 @@
 
     // Initialize map and controls when page loads
     document.addEventListener('DOMContentLoaded', function() {
+        // Explicitly set the default values
+        document.getElementById('startYear').value = 1970;
+        document.getElementById('endYear').value = 1975;
+        document.getElementById('endYearValue').textContent = 1975;
         updateYearFilter();
     });
 </script>
