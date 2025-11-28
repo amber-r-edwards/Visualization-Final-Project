@@ -3,8 +3,63 @@
 {% block title %}Publication Database - Feminist Zine Text Reuse Analysis{% endblock %}
 
 {% block content %}
+<style>
+    .container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    h1 {
+        color: #333;
+        border-bottom: 3px solid #df4aad;
+        padding-bottom: 10px;
+    }
+    .stats {
+        display: flex;
+        justify-content: space-around;
+        gap: 3rem;
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+    }
+    .stat-item {
+        text-align: center;
+    }
+    .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+        color: #df4aad;
+    }
+    .stat-label {
+        font-size: 12px;
+        color: #666;
+    }
+</style>
+
 <div style="padding: 2rem;">
     <h1>Zine Publications Database</h1>
+
+    <div id="stats" class="stats">
+        <div class="stat-item">
+            <div id="total-publications" class="stat-number">29</div>
+            <div class="stat-label">Publications</div>
+        </div>
+        <div class="stat-item">
+            <div id="total-locations" class="stat-number">24</div>
+            <div class="stat-label">Cities</div>
+        </div>
+        <div class="stat-item">
+            <div id="date-range" class="stat-number">1970-1997</div>
+            <div class="stat-label">Years Active</div>
+        </div>
+        <div class="stat-item">
+            <div id="total-issues" class="stat-number">340</div>
+            <div class="stat-label">Total Issues</div>
+        </div>
+    </div>
     
     <!-- Search and Filter Controls -->
     <div style="margin-bottom: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 5px;">
