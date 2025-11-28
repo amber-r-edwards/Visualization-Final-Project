@@ -1,4 +1,4 @@
-# Feminist Zine Text Reuse Visualization
+# Feminist Zine Text Reuse Visualizations
 
 ## Description
 This project provides interactive visualizations for exploring text reuse patterns in feminist publications from 1970-1975, extracted from a larger corpus of zines (up to 1997) from Herstory Archive: Feminist Newspapers. The Flask web application presents multiple perspectives on the data through geographic mapping, network analysis, and a searchable database interface. The visualizations allow users to explore cross-publication connections, filter by publication type and time periods, and examine the geographic distribution of feminist publishing during this era.
