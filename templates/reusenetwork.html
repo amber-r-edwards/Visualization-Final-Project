@@ -192,19 +192,22 @@
         // Function to populate publication legend using only visible publications
         function populatePublicationLegend() {
             const publicationLegendContainer = document.getElementById('publication-legend');
-            if (!publicationLegendContainer || !globalMetadata) return;
+            if (!publicationLegendContainer || !globalReuseData) return;
 
             publicationLegendContainer.innerHTML = '';
 
-            // Get unique publications that are actually in the current filtered data
-            const visiblePublications = [...new Set(globalMetadata
-                .map(page => page.publication_name)
-                .filter(Boolean)
-            )].sort();
+            // Get currently filtered data to see what publications are actually visible
+            const filteredReuse = applyCurrentFilters(globalReuseData);
+    
+            // Get unique publications that are in the current filtered reuse data
+            const visiblePublications = [...new Set([
+                ...filteredReuse.map(d => d.source_publication),
+                ...filteredReuse.map(d => d.target_publication)
+            ].filter(Boolean))].sort();
 
-            console.log('Publications visible in network:', visiblePublications);
+            console.log('Publications visible in current network filter:', visiblePublications);
 
-            // Show only the publications that are visible
+            // Show only the publications that are visible in the filtered data
             visiblePublications.forEach(pubName => {
                 // Get pub_id for this publication name
                 let pubId = null;
@@ -228,7 +231,7 @@
             });
 
             if (visiblePublications.length === 0) {
-                publicationLegendContainer.innerHTML = '<div style="color: #666; font-style: italic;">No publications found</div>';
+                publicationLegendContainer.innerHTML = '<div style="color: #666; font-style: italic;">No publications in current filter</div>';
             }
         }
 
