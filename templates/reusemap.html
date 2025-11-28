@@ -179,7 +179,6 @@
                 <span>Moderate Reuse</span>
             </div>
         </div>
-        
         <div class="legend-section">
             <h3>Publications (Node Colors)</h3>
             <div id="publication-legend" class="publication-legend">
@@ -229,7 +228,7 @@
     // Helper functions
     function getReuseTypeColor(reuseType) {
     return reuseTypeColorManager.getColor(reuseType);
-}
+    }
 
     function applyCurrentFilters(data) {
         const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
@@ -241,7 +240,6 @@
             if (reuseTypeFilter !== "all") {
                 passes = passes && d.reuse_type === reuseTypeFilter;
             }
-            
             
             if (publicationFilter !== "all") {
                 passes = passes && (d.source_publication === publicationFilter || 
@@ -257,6 +255,27 @@
         document.getElementById('total-cities').textContent = cities;
         document.getElementById('publications-count').textContent = publications;
         document.getElementById('avg-similarity').textContent = avgSimilarity.toFixed(3);
+    }
+
+    // Function to populate publication legend manually
+    function populatePublicationLegend() {
+        const publicationLegendContainer = document.getElementById('publication-legend');
+        if (publicationLegendContainer) {
+            publicationLegendContainer.innerHTML = '';
+            
+            // Show all publications except "Unknown"
+            Object.entries(publicationColorManager.publications).forEach(([name, data]) => {
+                if (name !== "Unknown") {
+                    const legendItem = document.createElement('div');
+                    legendItem.className = 'legend-item';
+                    legendItem.innerHTML = `
+                        <span class="legend-color" style="background-color: ${data.color}"></span>
+                        <span class="legend-label">${name}</span>
+                    `;
+                    publicationLegendContainer.appendChild(legendItem);
+                }
+            });
+        }
     }
 
     // Main geographic network function
@@ -691,7 +710,7 @@
         });
     }
 
-    // Replace the entire "Main data loading" section at the bottom with this:
+    // Main data loading
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DOM loaded, starting direct CSV data load...');
         
@@ -710,108 +729,83 @@
                 throw new Error('No reuse data found in CSV');
             }
             
-           // Process the data
-// 1. Create publication lookup using pub_id instead of publication_name
-pubLookupById = {}; // Use the global variable instead of const
-pageMetadata.forEach(page => {
-    pubLookupById[page.page_id] = {
-        publication_name: page.publication_name,
-        pub_id: page.pub_id
-    };
-});
+            // Process the data
+            // 1. Create publication lookup using pub_id instead of publication_name
+            pubLookupById = {}; // Use the global variable instead of const
+            pageMetadata.forEach(page => {
+                pubLookupById[page.page_id] = {
+                    publication_name: page.publication_name,
+                    pub_id: page.pub_id
+                };
+            });
 
-// 2. Create publication metadata lookup by pub_id
-const pubMetadataLookup = {};
-pubMetadata.forEach(pub => {
-    pubMetadataLookup[pub.pub_id] = pub;
-});
+            // 2. Create publication metadata lookup by pub_id
+            const pubMetadataLookup = {};
+            pubMetadata.forEach(pub => {
+                pubMetadataLookup[pub.pub_id] = pub;
+            });
 
-console.log('Publication metadata lookup created with pub_ids:', Object.keys(pubMetadataLookup));
-console.log('Sample page with pub_id:', pageMetadata.slice(0, 3).map(p => ({
-    page_id: p.page_id,
-    pub_id: p.pub_id,
-    publication_name: p.publication_name
-})));
+            console.log('Publication metadata lookup created with pub_ids:', Object.keys(pubMetadataLookup));
 
-// 3. Process reuse data and add publication names using pub_id
-const processedReuseData = reuseData.map(d => {
-    // Get publication info from page metadata using pub_id
-    const sourcePageInfo = pubLookupById[d.source_page_id];
-    const targetPageInfo = pubLookupById[d.target_page_id];
-    
-    const sourcePub = sourcePageInfo ? sourcePageInfo.publication_name : 'Unknown';
-    const targetPub = targetPageInfo ? targetPageInfo.publication_name : 'Unknown';
-    
-    // Determine reuse type based on similarity score
-    const similarity = +d.combined_similarity;
-    let reuseType;
-    if (similarity < 0.3) {
-        reuseType = 'minimal_reuse';
-    } else if (similarity < 0.7) {
-        reuseType = 'partial_reuse';
-    } else {
-        reuseType = 'moderate_reuse';
-    }
-    
-    return {
-        source_page_id: d.source_page_id,
-        target_page_id: d.target_page_id,
-        combined_similarity: +d.combined_similarity,
-        ngram_similarity: +(d.ngram_similarity || 0),
-        shingle_similarity: +(d.shingle_similarity || 0),
-        source_publication: sourcePub,
-        target_publication: targetPub,
-        source_date: d.source_date || '',
-        target_date: d.target_date || '',
-        reuse_type: reuseType,
-        shared_content: d.shared_content || ''
-    };
-});
+            // 3. Process reuse data and add publication names using pub_id
+            const processedReuseData = reuseData.map(d => {
+                // Get publication info from page metadata using pub_id
+                const sourcePageInfo = pubLookupById[d.source_page_id];
+                const targetPageInfo = pubLookupById[d.target_page_id];
+                
+                const sourcePub = sourcePageInfo ? sourcePageInfo.publication_name : 'Unknown';
+                const targetPub = targetPageInfo ? targetPageInfo.publication_name : 'Unknown';
+                
+                // Determine reuse type based on similarity score
+                const similarity = +d.combined_similarity;
+                let reuseType;
+                if (similarity < 0.3) {
+                    reuseType = 'minimal_reuse';
+                } else if (similarity < 0.7) {
+                    reuseType = 'partial_reuse';
+                } else {
+                    reuseType = 'moderate_reuse';
+                }
+                
+                return {
+                    source_page_id: d.source_page_id,
+                    target_page_id: d.target_page_id,
+                    combined_similarity: +d.combined_similarity,
+                    ngram_similarity: +(d.ngram_similarity || 0),
+                    shingle_similarity: +(d.shingle_similarity || 0),
+                    source_publication: sourcePub,
+                    target_publication: targetPub,
+                    source_date: d.source_date || '',
+                    target_date: d.target_date || '',
+                    reuse_type: reuseType,
+                    shared_content: d.shared_content || ''
+                };
+            });
 
-// 4. Combine page and publication metadata using pub_id
-const combinedMetadata = pageMetadata.map(page => {
-    // Get publication metadata using pub_id
-    const pubData = pubMetadataLookup[page.pub_id] || {};
-    
-    return {
-        page_id: page.page_id,
-        pub_id: page.pub_id,
-        publication_name: page.publication_name,
-        volume: page.volume || '',
-        number: page.number || '',
-        page_number: page.page_number || '',
-        organization: pubData.organization || '',
-        location: pubData.location || '', // Location from publication metadata via pub_id
-        region: pubData.region || '',
-        notes: pubData.notes || ''
-    };
-});
+            // 4. Combine page and publication metadata using pub_id
+            const combinedMetadata = pageMetadata.map(page => {
+                // Get publication metadata using pub_id
+                const pubData = pubMetadataLookup[page.pub_id] || {};
+                
+                return {
+                    page_id: page.page_id,
+                    pub_id: page.pub_id,
+                    publication_name: page.publication_name,
+                    volume: page.volume || '',
+                    number: page.number || '',
+                    page_number: page.page_number || '',
+                    organization: pubData.organization || '',
+                    location: pubData.location || '', // Location from publication metadata via pub_id
+                    region: pubData.region || '',
+                    notes: pubData.notes || ''
+                };
+            });
 
-// Updated debugging to verify the pub_id matching:
-console.log('=== PUB_ID MATCHING DEBUGGING ===');
-console.log('Total pages:', pageMetadata.length);
-console.log('Total pub metadata entries:', pubMetadata.length);
-console.log('Pages with pub_id:', pageMetadata.filter(p => p.pub_id).length);
-console.log('Pub metadata entries with pub_id:', pubMetadata.filter(p => p.pub_id).length);
-
-console.log('Sample combined metadata with locations:', 
-    combinedMetadata.filter(p => p.location).slice(0, 5).map(p => ({ 
-        page_id: p.page_id,
-        pub_id: p.pub_id,
-        location: p.location, 
-        publication_name: p.publication_name 
-    }))
-);
-console.log('Total pages with locations after pub_id matching:', 
-    combinedMetadata.filter(p => p.location).length);
-
-// Check pub_id matching success
-const successfulMatches = combinedMetadata.filter(p => p.location).length;
-const totalPages = combinedMetadata.length;
-console.log(`Location matching success rate: ${successfulMatches}/${totalPages} (${((successfulMatches/totalPages)*100).toFixed(1)}%)`);
-
-console.log('Available city coordinates:', Object.keys(cityCoordinates));
-console.log('=== END DEBUGGING ===');
+            console.log('Data processing complete:');
+            console.log('- Processed reuse data:', processedReuseData.length, 'records');
+            console.log('- Combined metadata:', combinedMetadata.length, 'records');
+            console.log('Total pages with locations after pub_id matching:', 
+                combinedMetadata.filter(p => p.location).length);
             
             // Store globally for use by other functions
             globalReuseData = processedReuseData;
@@ -828,9 +822,9 @@ console.log('=== END DEBUGGING ===');
             createGeographicNetwork(processedReuseData, combinedMetadata);
             setupControls();
             
-            // Update the legend
-            publicationColorManager.populateLegend('publication-legend');
-
+            // Populate the publication legend
+            populatePublicationLegend();
+            
         }).catch(function(error) {
             console.error("Error loading CSV data:", error);
             document.getElementById('loading').innerHTML = 
