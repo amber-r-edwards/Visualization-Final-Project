@@ -144,10 +144,6 @@
     </div>
 
     <div class="d3-controls">
-        <label>Geographic Similarity Threshold: 
-            <input type="range" id="geo-similarity-slider" min="0" max="1" step="0.01" value="0.1">
-            <span id="geo-similarity-value">0.10</span>
-        </label>
         <label>Filter by Year Range: 
             <input type="range" id="year-range-slider" min="1970" max="1975" step="1" value="1970">
             <span id="year-range-value">1970-1975</span>
@@ -291,27 +287,33 @@
     }
 
     function applyCurrentFilters(data) {
-        const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
-        const similarityThreshold = +document.getElementById("geo-similarity-slider").value;
-        const publicationFilter = document.getElementById("publication-filter").value;
+    const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
+    const yearThreshold = +document.getElementById("year-range-slider").value;
+    const publicationFilter = document.getElementById("publication-filter").value;
 
-        return data.filter(d => {
-            let passes = true;
-            
-            if (reuseTypeFilter !== "all") {
-                passes = passes && d.reuse_type === reuseTypeFilter;
-            }
-            
-            passes = passes && d.combined_similarity >= similarityThreshold;
-            
-            if (publicationFilter !== "all") {
-                passes = passes && (d.source_publication === publicationFilter || 
-                                  d.target_publication === publicationFilter);
-            }
-            
-            return passes;
-        });
-    }
+    return data.filter(d => {
+        let passes = true;
+        
+        if (reuseTypeFilter !== "all") {
+            passes = passes && d.reuse_type === reuseTypeFilter;
+        }
+        
+        // Year filtering - show connections where both source and target are >= selected year
+        const sourceYear = d.source_date ? parseInt(d.source_date.substring(0, 4)) : null;
+        const targetYear = d.target_date ? parseInt(d.target_date.substring(0, 4)) : null;
+        
+        if (sourceYear && targetYear) {
+            passes = passes && (sourceYear >= yearThreshold && targetYear >= yearThreshold);
+        }
+        
+        if (publicationFilter !== "all") {
+            passes = passes && (d.source_publication === publicationFilter || 
+                              d.target_publication === publicationFilter);
+        }
+        
+        return passes;
+    });
+}
 
     function updateStats(connections, cities, publications, avgSimilarity) {
         document.getElementById('total-connections').textContent = connections;
@@ -336,7 +338,7 @@
     }
 
     // Main geographic network function
-    function createGeographicNetwork(reuse_data, metadata, similarityThreshold = 0.1) {
+    function createGeographicNetwork(reuse_data, metadata) {
         console.log('Creating geographic network with', reuse_data.length, 'reuse data points');
         console.log('Metadata entries:', metadata.length);
         
@@ -699,56 +701,56 @@
     }
 
     function setupControls() {
-        console.log('Setting up geographic controls...');
-        
-        // Similarity slider
-        const geoSlider = document.getElementById("geo-similarity-slider");
-        const geoValue = document.getElementById("geo-similarity-value");
-        
-        if (geoSlider && geoValue) {
-            geoSlider.addEventListener("input", function() {
-                geoValue.textContent = (+this.value).toFixed(2);
-            });
-        }
-
-        // Filter dropdowns
-        const reuseTypeFilter = document.getElementById("reuse-type-filter");
-        const publicationFilter = document.getElementById("publication-filter");
-        
-        if (reuseTypeFilter) {
-            reuseTypeFilter.addEventListener("change", updateGeoNetwork);
-        }
-        
-        if (publicationFilter) {
-            publicationFilter.addEventListener("change", updateGeoNetwork);
-        }
-
-        // Update button
-        const updateButton = document.getElementById("refresh-geo-map");
-        if (updateButton) {
-            updateButton.addEventListener("click", updateGeoNetwork);
-        }
-
-        // Reset zoom button
-        const resetButton = document.getElementById("reset-map-zoom");
-        if (resetButton) {
-            resetButton.addEventListener("click", function() {
-                if (geoSvg && geoZoom) {
-                    geoSvg.transition().duration(750).call(
-                        geoZoom.transform,
-                        d3.zoomIdentity
-                    );
-                }
-            });
-        }
-        
-        console.log('Geographic controls set up successfully');
+    console.log('Setting up geographic controls...');
+    
+    // Year range slider
+    const yearSlider = document.getElementById("year-range-slider");
+    const yearValue = document.getElementById("year-range-value");
+    
+    if (yearSlider && yearValue) {
+        yearSlider.addEventListener("input", function() {
+            const minYear = +this.value;
+            yearValue.textContent = `${minYear}-1975`;
+        });
     }
+
+    // Filter dropdowns
+    const reuseTypeFilter = document.getElementById("reuse-type-filter");
+    const publicationFilter = document.getElementById("publication-filter");
+    
+    if (reuseTypeFilter) {
+        reuseTypeFilter.addEventListener("change", updateGeoNetwork);
+    }
+    
+    if (publicationFilter) {
+        publicationFilter.addEventListener("change", updateGeoNetwork);
+    }
+
+    // Update button
+    const updateButton = document.getElementById("refresh-geo-map");
+    if (updateButton) {
+        updateButton.addEventListener("click", updateGeoNetwork);
+    }
+
+    // Reset zoom button
+    const resetButton = document.getElementById("reset-map-zoom");
+    if (resetButton) {
+        resetButton.addEventListener("click", function() {
+            if (geoSvg && geoZoom) {
+                geoSvg.transition().duration(750).call(
+                    geoZoom.transform,
+                    d3.zoomIdentity
+                );
+            }
+        });
+    }
+    
+    console.log('Geographic controls set up successfully');
+}
 
     function updateGeoNetwork() {
         if (!globalReuseData || !globalMetadata) return;
-        const threshold = parseFloat(document.getElementById('geo-similarity-slider').value);
-        createGeographicNetwork(globalReuseData, globalMetadata, threshold);
+        createGeographicNetwork(globalReuseData, globalMetadata);
     }
 
     function populatePublicationFilter(metadata) {
