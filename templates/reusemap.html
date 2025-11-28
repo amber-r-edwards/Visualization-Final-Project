@@ -280,7 +280,7 @@
         'Detroit, MI': { lat: 42.3314, lon: -83.0458 },
         'Madison, WI': { lat: 43.0731, lon: -89.4012 },
         'Chapel Hill, NC': { lat: 35.9132, lon: -79.0558 },
-        'Cambridge, MA': { lat: 42.3736, jon: -71.1097 },
+        'Cambridge, MA': { lat: 42.3736, lon: -71.1097 },
         'Baltimore, MD': { lat: 39.2904, lon: -76.6122 }
     };
 
@@ -832,27 +832,49 @@
                 };
             });
             
-            // 3. Combine page and publication metadata
-            const combinedMetadata = pageMetadata.map(page => {
-                // Find matching publication metadata
-                const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
-                
-                return {
-                    page_id: page.page_id,
-                    publication_name: page.publication_name,
-                    volume: page.volume || '',
-                    number: page.number || '',
-                    page_number: page.page_number || '',
-                    organization: pubData.organization || '',
-                    location: pubData.location || '',
-                    region: pubData.region || '',
-                    notes: pubData.notes || ''
-                };
-            });
-            
-            console.log('Data processing complete:');
-            console.log('- Processed reuse data:', processedReuseData.length, 'records');
-            console.log('- Combined metadata:', combinedMetadata.length, 'records');
+            // 3. Combine page and publication metadata - FIXED VERSION
+const combinedMetadata = pageMetadata.map(page => {
+    // Find matching publication metadata
+    const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
+    
+    return {
+        page_id: page.page_id,
+        publication_name: page.publication_name,
+        volume: page.volume || '',
+        number: page.number || '',
+        page_number: page.page_number || '',
+        organization: pubData.organization || '',
+        location: pubData.location || page.location || '', // Try both sources for location
+        region: pubData.region || '',
+        notes: pubData.notes || '',
+        issue_date: page.issue_date || page.date || '' // Add date field
+    };
+});
+
+// Add this debugging right after the combinedMetadata creation:
+console.log('=== LOCATION DEBUGGING ===');
+console.log('Sample page metadata locations:', pageMetadata.slice(0, 5).map(p => ({ 
+    page_id: p.page_id, 
+    location: p.location, 
+    pub: p.publication_name 
+})));
+console.log('Sample pub metadata locations:', pubMetadata.slice(0, 5).map(p => ({ 
+    pub: p.publication_name, 
+    location: p.location 
+})));
+console.log('Sample combined metadata locations:', combinedMetadata.slice(0, 5).map(p => ({ 
+    page_id: p.page_id, 
+    location: p.location, 
+    pub: p.publication_name 
+})));
+console.log('Available city coordinates:', Object.keys(cityCoordinates));
+
+// Check which source has the location data
+const pageLocations = pageMetadata.filter(p => p.location).length;
+const pubLocations = pubMetadata.filter(p => p.location).length;
+console.log(`Page metadata with locations: ${pageLocations}/${pageMetadata.length}`);
+console.log(`Pub metadata with locations: ${pubLocations}/${pubMetadata.length}`);
+console.log('=== END DEBUGGING ===');
             
             // Store globally for use by other functions
             globalReuseData = processedReuseData;
