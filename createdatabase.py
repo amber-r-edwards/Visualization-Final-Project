@@ -16,13 +16,13 @@ def create_database():
     
     # Read the CSV file with proper encoding
     try:
-        df = pd.read_csv('zinepub_metadata.csv', encoding='utf-8')
+        df = pd.read_csv('static/data/zinepub_metadata.csv', encoding='utf-8')
     except UnicodeDecodeError:
         try:
-            df = pd.read_csv('zinepub_metadata.csv', encoding='latin-1')
+            df = pd.read_csv('static/data/zinepub_metadata.csv', encoding='latin-1')
             print("Used latin-1 encoding to read CSV file")
         except UnicodeDecodeError:
-            df = pd.read_csv('zinepub_metadata.csv', encoding='cp1252')
+            df = pd.read_csv('static/data/zinepub_metadata.csv', encoding='cp1252')
             print("Used cp1252 encoding to read CSV file")
     
     # Create connection to SQLite database

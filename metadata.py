@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Configuration
 TXTFILES_DIR = "txtfiles/"
-OUTPUT_CSV = "zinepage_metadata.csv"
+OUTPUT_CSV = "static/data/zinepage_metadata.csv"
 
 
 def extract_volume_number(filename):
