@@ -481,8 +481,14 @@
             if (pageData) {
                 const volume = pageData.volume ? `Vol. ${pageData.volume}` : '';
                 const number = pageData.number ? `No. ${pageData.number}` : '';
-                const parts = [pageData.publication_name, volume, number].filter(Boolean);
-                return parts.join(', ');
+                const pageNum = pageData.page_number ? `Page ${pageData.page_number}` : '';
+                const date = pageData.issue_date ? `Issue Date ${pageData.issue_date}` : '';
+                console.log('Date found:', date); // Debug line
+
+                const parts = [pageData.publication_name, volume, number, pageNum].filter(Boolean);
+                const info = parts.join(', ');
+
+                return date ? `${info}<br><strong>Date:</strong> ${date}` : info;
             }
     
             return `Page ${actualPageId}`;
@@ -566,7 +572,7 @@
                 tooltip.transition().duration(200).style("opacity", .9);
                 tooltip.html(`
                     <strong>Page ID:</strong> ${d.id}<br>
-                    <strong>Publication:</strong> ${d.publication}<br>
+                    ${getPageInfo(d.id)}<br>
                     <strong>Connections:</strong> ${d.linkCount}
                 `)
                 .style("left", (event.pageX + 10) + "px")
