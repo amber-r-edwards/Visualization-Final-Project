@@ -144,10 +144,6 @@
     </div>
 
     <div class="d3-controls">
-        <label>Geographic Similarity Threshold: 
-            <input type="range" id="geo-similarity-slider" min="0" max="1" step="0.01" value="0.1">
-            <span id="geo-similarity-value">0.10</span>
-        </label>
         <label>Filter by Reuse Type:
             <select id="reuse-type-filter">
                 <option value="all">All Types</option>
@@ -296,7 +292,6 @@
 
     function applyCurrentFilters(data) {
         const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
-        const similarityThreshold = +document.getElementById("geo-similarity-slider").value;
         const publicationFilter = document.getElementById("publication-filter").value;
 
         return data.filter(d => {
@@ -306,7 +301,6 @@
                 passes = passes && d.reuse_type === reuseTypeFilter;
             }
             
-            passes = passes && d.combined_similarity >= similarityThreshold;
             
             if (publicationFilter !== "all") {
                 passes = passes && (d.source_publication === publicationFilter || 
@@ -340,7 +334,7 @@
     }
 
     // Main geographic network function
-    function createGeographicNetwork(reuse_data, metadata, similarityThreshold = 0.1) {
+    function createGeographicNetwork(reuse_data, metadata) {
         console.log('Creating geographic network with', reuse_data.length, 'reuse data points');
         console.log('Metadata entries:', metadata.length);
         
@@ -704,16 +698,6 @@
 
     function setupControls() {
         console.log('Setting up geographic controls...');
-        
-        // Similarity slider
-        const geoSlider = document.getElementById("geo-similarity-slider");
-        const geoValue = document.getElementById("geo-similarity-value");
-        
-        if (geoSlider && geoValue) {
-            geoSlider.addEventListener("input", function() {
-                geoValue.textContent = (+this.value).toFixed(2);
-            });
-        }
 
         // Filter dropdowns
         const reuseTypeFilter = document.getElementById("reuse-type-filter");
@@ -751,8 +735,7 @@
 
     function updateGeoNetwork() {
         if (!globalReuseData || !globalMetadata) return;
-        const threshold = parseFloat(document.getElementById('geo-similarity-slider').value);
-        createGeographicNetwork(globalReuseData, globalMetadata, threshold);
+        createGeographicNetwork(globalReuseData, globalMetadata);
     }
 
     function populatePublicationFilter(metadata) {
