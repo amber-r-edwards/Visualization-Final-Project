@@ -470,6 +470,23 @@
             });
         
         svg.call(zoom);
+
+        function getPageInfo(pageId) {
+            // Handle case where pageId might be an object (due to D3 link processing)
+            const actualPageId = typeof pageId === 'object' ? pageId.id : pageId;
+    
+            // Find the page in globalMetadata
+            const pageData = globalMetadata.find(page => page.page_id === actualPageId);
+    
+            if (pageData) {
+                const volume = pageData.volume ? `Vol. ${pageData.volume}` : '';
+                const number = pageData.number ? `No. ${pageData.number}` : '';
+                const parts = [pageData.publication_name, volume, number].filter(Boolean);
+                return parts.join(', ');
+            }
+    
+            return `Page ${actualPageId}`;
+        }
         
         // Create tooltip
         const tooltip = d3.select("body").select(".tooltip").empty() ? 
@@ -502,17 +519,17 @@
             .attr("stroke", d => d.linkColor)
             .attr("stroke-opacity", d => d.linkOpacity)
             .attr("stroke-width", d => Math.max(1, d.similarity * 8))
-            .attr("stroke-dasharray", d => d.isDashed ? "5,5" : "none")
+            .attr("stroke-dasharray", "none")
             .on("mouseover", (event, d) => {
                 tooltip.transition().duration(200).style("opacity", .9);
                 tooltip.html(`
-                    <strong>${d.sourcePublication} (Page ${d.source}) → ${d.targetPublication} (Page ${d.target})</strong><br/>
+                    <strong>${d.sourcePublication} → ${d.targetPublication}</strong><br/>
+                    <strong>Source:</strong> ${getPageInfo(d.source)}<br/>
+                    <strong>Target:</strong> ${getPageInfo(d.target)}<br/>
                     Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
                     Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
                     Source Date: ${d.source_date}<br/>
                     Target Date: ${d.target_date}<br/>
-                    ${d.isCrossPublication ? '<span style="color: #ffd700;">Cross-publication reuse</span>' : 'Within publication'}<br/>
-                    <br/>
                     Shared Content:<br/>
                     "${d.shared_content ? d.shared_content.substring(0, 200) + '...' : 'N/A'}"
                 `)
