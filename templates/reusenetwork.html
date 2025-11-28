@@ -523,9 +523,7 @@
             .on("mouseover", (event, d) => {
                 tooltip.transition().duration(200).style("opacity", .9);
                 tooltip.html(`
-                    <strong>${d.sourcePublication} → ${d.targetPublication}</strong><br/>
-                    <strong>Source:</strong> ${getPageInfo(d.source)}<br/>
-                    <strong>Target:</strong> ${getPageInfo(d.target)}<br/>
+                    <strong>${getPageInfo(d.source)} → ${getPageInfo(d.target)}</strong><br/>
                     Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
                     Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
                     Source Date: ${d.source_date}<br/>
