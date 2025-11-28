@@ -125,12 +125,12 @@
         <h1>Feminist Zine Text Reuse Network Visualization</h1>
         <p>Interactive network visualization showing text reuse patterns among feminist publications from 1970-1975</p>
         
+        <div id="loading" style="text-align: center; padding: 2rem; color: #666;">
+            Loading network data...
+        </div>
+
         <h2>Page-Level Network</h2>
         <div class="d3-controls">
-            <label>Similarity Threshold: 
-                <input type="range" id="similarity-threshold" min="0" max="1" step="0.01" value="0.1">
-                <span id="similarity-value">0.10</span>
-            </label>
             <label>Filter by Reuse Type:
                 <select id="reuse-type-filter">
                     <option value="all">All Types</option>
@@ -152,15 +152,15 @@
             <div class="legend-section">
                 <h3>Reuse Types (Edge Colors)</h3>
                 <div class="legend-item">
-                    <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                    <div class="legend-color" style="background-color: #95a5a6;"></div>
                     <span>Minimal Reuse</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color" style="background-color: #4ecdc4;"></div>
+                    <div class="legend-color" style="background-color: #f39c12;"></div>
                     <span>Partial Reuse</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-color" style="background-color: #45b7d1;"></div>
+                    <div class="legend-color" style="background-color: #e74c3c;"></div>
                     <span>Moderate Reuse</span>
                 </div>
             </div>
@@ -178,405 +178,489 @@
 
     <script>
         // Global variables
-        let globalData = null;
+        let globalReuseData = null;
+        let globalMetadata = null;
         let networkSvg = null;
         let simulation = null;
-
-        // Load and process the data via API
-        d3.json("/api/reuse-data").then(function(data) {
-            globalData = data; // Store for updates
-            
-            // Parse numerical values and dates
-            data.forEach(d => {
-                d.combined_similarity = +d.combined_similarity;
-                d.ngram_similarity = +d.ngram_similarity;
-                d.shingle_similarity = +d.shingle_similarity;
-                d.source_date = new Date(d.source_date);
-                d.target_date = new Date(d.target_date);
-            });
-
-            // Initialize the network
-            createD3PageNetwork(data);
-            setupControls();
-
-        }).catch(function(error) {
-            console.error("Error loading the reuse data:", error);
-            document.querySelector('.container').innerHTML += 
-                '<div style="color: red; padding: 20px;">Error loading reuse data. Please check that the server is running and the data file exists.</div>';
-        });
-
-
-    function updateLegend() {
-    fetch('/api/publications')
-        .then(response => response.json())
-        .then(publications => {
-            publications.forEach(pub => {
-                publicationColorManager.getColor(pub.pub_id, pub.publication_name);
-            });
-            publicationColorManager.populateLegend('publication-legend');
-        });
-}
-
-document.addEventListener('DOMContentLoaded', updateLegend);
-
-
-        // ============================================================================
-        // D3.JS PAGE-LEVEL NETWORK 
-        // ============================================================================
-        function createD3PageNetwork(reuse_data, similarityThreshold = 0.1, maxLinksPerNode = 20) {
-            // Clear previous network
-            d3.select("#d3-network").selectAll("*").remove();
-            
-            // Publication colors - matching index.html
-            const pubColors = {
-                "AintIAWoman": '#e74c3c',        // Red
-                "BigMammaRag": '#3498db',          // Blue
-                "DoitNow": '#2ecc71',              // Green
-                "GoldFlower": '#f39c12',            // Orange
-                "AtalantaVol1No2": '#9b59b6',      // Purple
-                "default": '#95a5a6'                 // Gray for unknown
-            };
-
-            console.log(`Using reuse data: ${reuse_data.length} matches`);
-            
-            // Apply filters
-            let filteredReuse = applyCurrentFilters(reuse_data);
-
-            // Create nodes from unique page IDs
-            const connectedPageIds = new Set([
-                ...filteredReuse.map(d => d.source_page_id),
-                ...filteredReuse.map(d => d.target_page_id)
-            ]);
-            
-            const nodes = Array.from(connectedPageIds).map(pageId => {
-                // Find a match to get publication info
-                const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
-                const publication = match?.source_page_id === pageId ? 
-                    match.source_publication : match.target_publication;
-                
-                return {
-                    id: pageId,
-                    publication: publication,
-                    color: pubColors[publication] || pubColors['default'],
-                    linkCount: 0, // Will be calculated
-                    size: 8 // Base size
-                };
-            });
-            
-            // Create node lookup
-            const nodeMap = new Map(nodes.map(n => [n.id, n]));
-            
-            // Count links per node and create links array
-            const linkCounts = {};
-            const links = [];
-            
-            filteredReuse.forEach(match => {
-                const sourceId = match.source_page_id;
-                const targetId = match.target_page_id;
-                const similarity = match.combined_similarity;
-                
-                // Count links
-                linkCounts[sourceId] = (linkCounts[sourceId] || 0) + 1;
-                linkCounts[targetId] = (linkCounts[targetId] || 0) + 1;
-                
-                // Only add link if both nodes exist and haven't exceeded max links
-                if (nodeMap.has(sourceId) && nodeMap.has(targetId) &&
-                    (linkCounts[sourceId] || 0) <= maxLinksPerNode &&
-                    (linkCounts[targetId] || 0) <= maxLinksPerNode) {
-                    
-                    // Determine link color and style based on publication relationship
-                    const sourceNode = nodeMap.get(sourceId);
-                    const targetNode = nodeMap.get(targetId);
-                    let linkColor = '#999'; // Default gray
-                    let linkOpacity = 0.6;
-                    let isDashed = false;
-                    
-                    if (sourceNode.publication === targetNode.publication) {
-                        // Same publication - use publication color but lighter
-                        linkColor = sourceNode.color;
-                        linkOpacity = 0.3;
-                    } else {
-                        // Different publications - use reuse type color and dashed
-                        linkColor = getReuseTypeColor(match.reuse_type);
-                        linkOpacity = 0.8;
-                        isDashed = true;
-                    }
-                    
-                    links.push({
-                        source: sourceId,
-                        target: targetId,
-                        similarity: similarity,
-                        reuse_type: match.reuse_type,
-                        shared_content: match.shared_content,
-                        source_date: match.source_date,
-                        target_date: match.target_date,
-                        sourcePublication: match.source_publication,
-                        targetPublication: match.target_publication,
-                        linkColor: linkColor,
-                        linkOpacity: linkOpacity,
-                        isDashed: isDashed,
-                        isCrossPublication: sourceNode.publication !== targetNode.publication
-                    });
-                }
-            });
-            
-            // Update node link counts and sizes
-            nodes.forEach(node => {
-                const count = linkCounts[node.id] || 0;
-                node.linkCount = count;
-                node.size = Math.max(5, Math.min(20, 8 + count * 1.5)); // Scale size with connections
-            });
-            
-            // Set up SVG
-            const container = d3.select("#d3-network");
-            const width = container.node().getBoundingClientRect().width;
-            const height = 700;
-            
-            const svg = container
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
-            
-            // Add zoom behavior
-            const g = svg.append("g");
-            const zoom = d3.zoom()
-                .scaleExtent([0.1, 4])
-                .on("zoom", (event) => {
-                    g.attr("transform", event.transform);
-                });
-            
-            svg.call(zoom);
-            
-            // Create tooltip
-            const tooltip = d3.select("body").select(".tooltip").empty() ? 
-                d3.select("body").append("div").attr("class", "tooltip") :
-                d3.select("body").select(".tooltip");
-            
-            // Update publication legend
-            updatePublicationLegend(nodes, pubColors);
-            
-            // Create force simulation
-            simulation = d3.forceSimulation(nodes)
-                .force("link", d3.forceLink(links)
-                    .id(d => d.id)
-                    .distance(d => d.isCrossPublication ? 150 : 100)
-                    .strength(d => Math.max(0.1, d.similarity * 1.5))
-                )
-                .force("charge", d3.forceManyBody()
-                    .strength(d => -200 - (d.linkCount * 10))
-                )
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collision", d3.forceCollide()
-                    .radius(d => d.size + 3)
-                )
-                .force("x", d3.forceX(width / 2).strength(0.1))
-                .force("y", d3.forceY(height / 2).strength(0.1));
-            
-            // Create links
-            const link = g.append("g")
-                .attr("class", "links")
-                .selectAll("line")
-                .data(links)
-                .enter().append("line")
-                .attr("stroke", d => d.linkColor)
-                .attr("stroke-opacity", d => d.linkOpacity)
-                .attr("stroke-width", d => Math.max(1, d.similarity * 8)) // Weight by similarity
-                .attr("stroke-dasharray", d => d.isDashed ? "5,5" : "none") // Dashed for cross-publication
-                .on("mouseover", (event, d) => {
-                    tooltip.transition().duration(200).style("opacity", .9);
-                    tooltip.html(`
-                        <strong>${d.sourcePublication} (Page ${d.source}) → ${d.targetPublication} (Page ${d.target})</strong><br/>
-                        Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
-                        Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
-                        Source Date: ${d.source_date.toLocaleDateString()}<br/>
-                        Target Date: ${d.target_date.toLocaleDateString()}<br/>
-                        ${d.isCrossPublication ? '<span style="color: #ffd700;">Cross-publication reuse</span>' : 'Within publication'}<br/>
-                        <br/>
-                        Shared Content:<br/>
-                        "${d.shared_content.substring(0, 200)}..."
-                    `)
-                    .style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-                })
-                .on("mouseout", () => {
-                    tooltip.transition().duration(500).style("opacity", 0);
-                });
-            
-            // Create nodes
-            const node = g.append("g")
-                .attr("class", "nodes")
-                .selectAll("circle")
-                .data(nodes)
-                .enter().append("circle")
-                .attr("r", d => d.size)
-                .attr("fill", d => d.color)
-                .attr("stroke", "#fff")
-                .attr("stroke-width", 2)
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended))
-                .on("mouseover", (event, d) => {
-                    // Highlight connected nodes
-                    const connectedNodeIds = new Set();
-                    links.forEach(link => {
-                        if (link.source.id === d.id) connectedNodeIds.add(link.target.id);
-                        if (link.target.id === d.id) connectedNodeIds.add(link.source.id);
-                    });
-                    
-                    node.style("opacity", n => connectedNodeIds.has(n.id) || n.id === d.id ? 1 : 0.3);
-                    link.style("opacity", l => l.source.id === d.id || l.target.id === d.id ? 1 : 0.1);
-                    
-                    tooltip.transition().duration(200).style("opacity", .9);
-                    tooltip.html(`
-                        <strong>Page ID:</strong> ${d.id}<br>
-                        <strong>Publication:</strong> ${d.publication}<br>
-                        <strong>Connections:</strong> ${d.linkCount}
-                    `)
-                    .style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-                })
-                .on("mouseout", () => {
-                    node.style("opacity", 1);
-                    link.style("opacity", d => d.linkOpacity);
-                    tooltip.transition().duration(500).style("opacity", 0);
-                });
-            
-            // Update positions on simulation tick
-            simulation.on("tick", () => {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-                
-                node
-                    .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
-            });
-            
-            // Drag functions
-            function dragstarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-            
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-            
-            function dragended(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-            
-            // Store svg reference for controls
-            networkSvg = svg;
-            
-            // Reset zoom function
-            window.resetZoom = function() {
-                svg.transition().duration(750).call(
-                    zoom.transform,
-                    d3.zoomIdentity
-                );
-            };
-            
-            console.log(`D3 Network: ${nodes.length} nodes, ${links.length} links (${links.filter(l => l.isCrossPublication).length} cross-publication)`);
-        }
-
-        // Helper function for reuse type colors
+        let pubLookupById = {}; // Add this line for pub_id linking
+        
+        // Helper function for reuse type colors using publication-colors.js
         function getReuseTypeColor(reuseType) {
-            const colors = {
-                "minimal_reuse": '#ff6b6b',
-                "partial_reuse": '#4ecdc4', 
-                "moderate_reuse": '#45b7d1'
+            return reuseTypeColorManager.getColor(reuseType);
+        }
+
+        // Function to populate publication legend using only visible publications
+        function populatePublicationLegend() {
+            const publicationLegendContainer = document.getElementById('publication-legend');
+            if (!publicationLegendContainer || !globalMetadata) return;
+
+            publicationLegendContainer.innerHTML = '';
+
+            // Get unique publications that are actually in the current filtered data
+            const visiblePublications = [...new Set(globalMetadata
+                .map(page => page.publication_name)
+                .filter(Boolean)
+            )].sort();
+
+            console.log('Publications visible in network:', visiblePublications);
+
+            // Show only the publications that are visible
+            visiblePublications.forEach(pubName => {
+                // Get pub_id for this publication name
+                let pubId = null;
+                for (const [pageId, pageInfo] of Object.entries(pubLookupById)) {
+                    if (pageInfo.publication_name === pubName) {
+                        pubId = pageInfo.pub_id;
+                        break;
+                    }
+                }
+
+                // Get color using pub_id
+                const color = pubId ? publicationColorManager.getColorById(pubId) : publicationColorManager.getColor(pubName);
+
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.innerHTML = `
+                    <span class="legend-color" style="background-color: ${color}"></span>
+                    <span class="legend-label">${pubName}</span>
+                `;
+                publicationLegendContainer.appendChild(legendItem);
+            });
+
+            if (visiblePublications.length === 0) {
+                publicationLegendContainer.innerHTML = '<div style="color: #666; font-style: italic;">No publications found</div>';
+            }
+        }
+
+        // Main data loading - Updated to use CSV files directly
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, starting direct CSV data load...');
+        
+            // Load CSV files directly from static/data/
+            Promise.all([
+                d3.csv("{{ url_for('static', filename='data/text_reuse_ngrams_windowed_parallel_filtered.csv') }}"),
+                d3.csv("{{ url_for('static', filename='data/zinepage_metadata.csv') }}"),
+                d3.csv("{{ url_for('static', filename='data/zinepub_metadata.csv') }}")
+            ]).then(function([reuseData, pageMetadata, pubMetadata]) {
+                console.log('Raw CSV data loaded:');
+                console.log('- Reuse data:', reuseData.length, 'records');
+                console.log('- Page metadata:', pageMetadata.length, 'records');
+                console.log('- Publication metadata:', pubMetadata.length, 'records');
+            
+                if (!reuseData || reuseData.length === 0) {
+                    throw new Error('No reuse data found in CSV');
+                }
+            
+                // Process the data using pub_id linking
+                // 1. Create publication lookup using pub_id
+                pubLookupById = {};
+                pageMetadata.forEach(page => {
+                    pubLookupById[page.page_id] = {
+                        publication_name: page.publication_name,
+                        pub_id: page.pub_id
+                    };
+                });
+
+                // 2. Create publication metadata lookup by pub_id
+                const pubMetadataLookup = {};
+                pubMetadata.forEach(pub => {
+                    pubMetadataLookup[pub.pub_id] = pub;
+                });
+
+                // 3. Process reuse data
+                const processedReuseData = reuseData.map(d => {
+                    const sourcePageInfo = pubLookupById[d.source_page_id];
+                    const targetPageInfo = pubLookupById[d.target_page_id];
+                
+                    const sourcePub = sourcePageInfo ? sourcePageInfo.publication_name : 'Unknown';
+                    const targetPub = targetPageInfo ? targetPageInfo.publication_name : 'Unknown';
+                
+                    // Determine reuse type based on similarity score
+                    const similarity = +d.combined_similarity;
+                    let reuseType;
+                    if (similarity < 0.3) {
+                        reuseType = 'minimal_reuse';
+                    } else if (similarity < 0.7) {
+                        reuseType = 'partial_reuse';
+                    } else {
+                        reuseType = 'moderate_reuse';
+                    }
+                
+                    return {
+                        source_page_id: d.source_page_id,
+                        target_page_id: d.target_page_id,
+                        combined_similarity: +d.combined_similarity,
+                        ngram_similarity: +(d.ngram_similarity || 0),
+                        shingle_similarity: +(d.shingle_similarity || 0),
+                        source_publication: sourcePub,
+                        target_publication: targetPub,
+                        source_date: d.source_date || '',
+                        target_date: d.target_date || '',
+                        reuse_type: reuseType,
+                        shared_content: d.shared_content || ''
+                    };
+                });
+
+                // 4. Combine metadata using pub_id
+                const combinedMetadata = pageMetadata.map(page => {
+                    const pubData = pubMetadataLookup[page.pub_id] || {};
+                
+                    return {
+                        page_id: page.page_id,
+                        pub_id: page.pub_id,
+                        publication_name: page.publication_name,
+                        volume: page.volume || '',
+                        number: page.number || '',
+                        page_number: page.page_number || '',
+                        organization: pubData.organization || '',
+                        location: pubData.location || '',
+                        region: pubData.region || '',
+                        notes: pubData.notes || ''
+                    };
+                });
+
+                // Store globally
+                globalReuseData = processedReuseData;
+                globalMetadata = combinedMetadata;
+
+                // Hide loading, show controls
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.d3-controls').style.display = 'block';
+
+                // Initialize the network
+                createD3PageNetwork(processedReuseData);
+                setupControls();
+                populatePublicationLegend();
+
+            }).catch(function(error) {
+                console.error("Error loading CSV data:", error);
+                document.getElementById('loading').innerHTML = 
+                    `<div style="color: red; padding: 20px; background: #ffebee; border: 1px solid #f44336; border-radius: 5px;">
+                        <h3>Error Loading Data</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>Make sure these CSV files exist in your static/data/ folder:</p>
+                        <ul>
+                            <li>text_reuse_ngrams_windowed_parallel_filtered.csv</li>
+                            <li>zinepage_metadata.csv</li>
+                            <li>zinepub_metadata.csv</li>
+                        </ul>
+                    </div>`;
+            });
+        });
+
+    // Updated network creation function
+    function createD3PageNetwork(reuse_data, maxLinksPerNode = 20) {
+        // Clear previous network
+        d3.select("#d3-network").selectAll("*").remove();
+
+        console.log(`Using reuse data: ${reuse_data.length} matches`);
+        
+        // Apply filters (remove similarity threshold)
+        let filteredReuse = applyCurrentFilters(reuse_data);
+
+        // Create nodes from unique page IDs
+        const connectedPageIds = new Set([
+            ...filteredReuse.map(d => d.source_page_id),
+            ...filteredReuse.map(d => d.target_page_id)
+        ]);
+        
+        const nodes = Array.from(connectedPageIds).map(pageId => {
+            const match = filteredReuse.find(d => d.source_page_id === pageId || d.target_page_id === pageId);
+            const publication = match?.source_page_id === pageId ? 
+                match.source_publication : match.target_publication;
+            
+            // Get pub_id for color
+            const pageInfo = pubLookupById[pageId];
+            const pubId = pageInfo ? pageInfo.pub_id : null;
+            const color = pubId ? publicationColorManager.getColorById(pubId) : publicationColorManager.getColor(publication);
+            
+            return {
+                id: pageId,
+                publication: publication,
+                pub_id: pubId,
+                color: color,
+                linkCount: 0,
+                size: 8
             };
-            return colors[reuseType] || '#999';
-        }
-
-        // Update publication legend
-        function updatePublicationLegend(nodes, pubColors) {
-            const publicationLegendContainer = d3.select("#publication-legend");
-            publicationLegendContainer.selectAll("*").remove();
+        });
+        
+        // Create node lookup
+        const nodeMap = new Map(nodes.map(n => [n.id, n]));
+        
+        // Count links per node and create links array
+        const linkCounts = {};
+        const links = [];
+        
+        filteredReuse.forEach(match => {
+            const sourceId = match.source_page_id;
+            const targetId = match.target_page_id;
+            const similarity = match.combined_similarity;
             
-            const publications = [...new Set(nodes.map(n => n.publication))].sort();
+            // Count links
+            linkCounts[sourceId] = (linkCounts[sourceId] || 0) + 1;
+            linkCounts[targetId] = (linkCounts[targetId] || 0) + 1;
             
-            publications.forEach(pub => {
-                const legendItem = publicationLegendContainer.append("div")
-                    .attr("class", "legend-item");
+            // Only add link if both nodes exist and haven't exceeded max links
+            if (nodeMap.has(sourceId) && nodeMap.has(targetId) &&
+                (linkCounts[sourceId] || 0) <= maxLinksPerNode &&
+                (linkCounts[targetId] || 0) <= maxLinksPerNode) {
                 
-                legendItem.append("div")
-                    .attr("class", "legend-color")
-                    .style("background-color", pubColors[pub] || pubColors['default']);
+                // Determine link color and style based on publication relationship
+                const sourceNode = nodeMap.get(sourceId);
+                const targetNode = nodeMap.get(targetId);
+                let linkColor = '#999'; // Default gray
+                let linkOpacity = 0.6;
+                let isDashed = false;
                 
-                legendItem.append("span")
-                    .text(pub);
-            });
-
-            // Populate publication filter dropdown
-            const publicationFilter = d3.select("#publication-filter");
-            publicationFilter.selectAll("option:not([value='all'])").remove();
-            publications.forEach(pub => {
-                publicationFilter.append("option")
-                    .attr("value", pub)
-                    .text(pub);
-            });
-        }
-
-        // Apply current filter settings
-        function applyCurrentFilters(data) {
-            const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
-            const similarityThreshold = +document.getElementById("similarity-threshold").value;
-            const publicationFilter = document.getElementById("publication-filter").value;
-
-            return data.filter(d => {
-                let passes = true;
-                
-                if (reuseTypeFilter !== "all") {
-                    passes = passes && d.reuse_type === reuseTypeFilter;
+                if (sourceNode.publication === targetNode.publication) {
+                    // Same publication - use publication color but lighter
+                    linkColor = sourceNode.color;
+                    linkOpacity = 0.3;
+                } else {
+                    // Different publications - use reuse type color and dashed
+                    linkColor = getReuseTypeColor(match.reuse_type);
+                    linkOpacity = 0.8;
+                    isDashed = true;
                 }
                 
-                passes = passes && d.combined_similarity >= similarityThreshold;
-                
-                if (publicationFilter !== "all") {
-                    passes = passes && (d.source_publication === publicationFilter || 
-                                      d.target_publication === publicationFilter);
-                }
-                
-                return passes;
+                links.push({
+                    source: sourceId,
+                    target: targetId,
+                    similarity: similarity,
+                    reuse_type: match.reuse_type,
+                    shared_content: match.shared_content,
+                    source_date: match.source_date,
+                    target_date: match.target_date,
+                    sourcePublication: match.source_publication,
+                    targetPublication: match.target_publication,
+                    linkColor: linkColor,
+                    linkOpacity: linkOpacity,
+                    isDashed: isDashed,
+                    isCrossPublication: sourceNode.publication !== targetNode.publication
+                });
+            }
+        });
+        
+        // Update node link counts and sizes
+        nodes.forEach(node => {
+            const count = linkCounts[node.id] || 0;
+            node.linkCount = count;
+            node.size = Math.max(5, Math.min(20, 8 + count * 1.5));
+        });
+        
+        // Set up SVG (rest of function remains the same as original)
+        const container = d3.select("#d3-network");
+        const width = container.node().getBoundingClientRect().width;
+        const height = 700;
+        
+        const svg = container
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+        
+        // Add zoom behavior
+        const g = svg.append("g");
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
             });
-        }
-
-        // Update network with current filters
-        function updateNetwork() {
-            if (!globalData) return;
-            createD3PageNetwork(globalData);
-        }
-
-        // Setup control event listeners
-        function setupControls() {
-            // Similarity slider
-            const similaritySlider = document.getElementById("similarity-threshold");
-            const similarityValue = document.getElementById("similarity-value");
+        
+        svg.call(zoom);
+        
+        // Create tooltip
+        const tooltip = d3.select("body").select(".tooltip").empty() ? 
+            d3.select("body").append("div").attr("class", "tooltip") :
+            d3.select("body").select(".tooltip");
+        
+        // Create force simulation
+        simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links)
+                .id(d => d.id)
+                .distance(d => d.isCrossPublication ? 150 : 100)
+                .strength(d => Math.max(0.1, d.similarity * 1.5))
+            )
+            .force("charge", d3.forceManyBody()
+                .strength(d => -200 - (d.linkCount * 10))
+            )
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide()
+                .radius(d => d.size + 3)
+            )
+            .force("x", d3.forceX(width / 2).strength(0.1))
+            .force("y", d3.forceY(height / 2).strength(0.1));
+        
+        // Create links
+        const link = g.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(links)
+            .enter().append("line")
+            .attr("stroke", d => d.linkColor)
+            .attr("stroke-opacity", d => d.linkOpacity)
+            .attr("stroke-width", d => Math.max(1, d.similarity * 8))
+            .attr("stroke-dasharray", d => d.isDashed ? "5,5" : "none")
+            .on("mouseover", (event, d) => {
+                tooltip.transition().duration(200).style("opacity", .9);
+                tooltip.html(`
+                    <strong>${d.sourcePublication} (Page ${d.source}) → ${d.targetPublication} (Page ${d.target})</strong><br/>
+                    Reuse Type: ${d.reuse_type.replace('_', ' ')}<br/>
+                    Similarity: ${(d.similarity * 100).toFixed(1)}%<br/>
+                    Source Date: ${d.source_date}<br/>
+                    Target Date: ${d.target_date}<br/>
+                    ${d.isCrossPublication ? '<span style="color: #ffd700;">Cross-publication reuse</span>' : 'Within publication'}<br/>
+                    <br/>
+                    Shared Content:<br/>
+                    "${d.shared_content ? d.shared_content.substring(0, 200) + '...' : 'N/A'}"
+                `)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", () => {
+                tooltip.transition().duration(500).style("opacity", 0);
+            });
+        
+        // Create nodes
+        const node = g.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(nodes)
+            .enter().append("circle")
+            .attr("r", d => d.size)
+            .attr("fill", d => d.color)
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 2)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended))
+            .on("mouseover", (event, d) => {
+                // Highlight connected nodes
+                const connectedNodeIds = new Set();
+                links.forEach(link => {
+                    if (link.source.id === d.id) connectedNodeIds.add(link.target.id);
+                    if (link.target.id === d.id) connectedNodeIds.add(link.source.id);
+                });
+                
+                node.style("opacity", n => connectedNodeIds.has(n.id) || n.id === d.id ? 1 : 0.3);
+                link.style("opacity", l => l.source.id === d.id || l.target.id === d.id ? 1 : 0.1);
+                
+                tooltip.transition().duration(200).style("opacity", .9);
+                tooltip.html(`
+                    <strong>Page ID:</strong> ${d.id}<br>
+                    <strong>Publication:</strong> ${d.publication}<br>
+                    <strong>Connections:</strong> ${d.linkCount}
+                `)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", () => {
+                node.style("opacity", 1);
+                link.style("opacity", d => d.linkOpacity);
+                tooltip.transition().duration(500).style("opacity", 0);
+            });
+        
+        // Update positions on simulation tick
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
             
-            similaritySlider.addEventListener("input", function() {
-                similarityValue.textContent = (+this.value).toFixed(2);
-                updateNetwork();
-            });
-
-            // Filter dropdowns
-            document.getElementById("reuse-type-filter").addEventListener("change", updateNetwork);
-            document.getElementById("publication-filter").addEventListener("change", updateNetwork);
-
-            // Reset zoom button
-            document.getElementById("reset-zoom").addEventListener("click", function() {
-                if (window.resetZoom) window.resetZoom();
-            });
+            node
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+        });
+        
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
         }
-    </script>
-</body>
-</html>
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Store svg reference for controls
+        networkSvg = svg;
+        
+        // Reset zoom function
+        window.resetZoom = function() {
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity
+            );
+        };
+        
+        console.log(`D3 Network: ${nodes.length} nodes, ${links.length} links (${links.filter(l => l.isCrossPublication).length} cross-publication)`);
+    }
+
+    // Update publication filter
+    function populatePublicationFilter(metadata) {
+        const publications = [...new Set(metadata.map(d => d.publication_name))].filter(Boolean).sort();
+        
+        const publicationFilter = document.getElementById('publication-filter');
+        publicationFilter.innerHTML = '<option value="all">All Publications</option>';
+        
+        publications.forEach(pub => {
+            const option = document.createElement('option');
+            option.value = pub;
+            option.textContent = pub;
+            publicationFilter.appendChild(option);
+        });
+    }
+
+    // Apply current filter settings (remove similarity threshold)
+    function applyCurrentFilters(data) {
+        const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
+        const publicationFilter = document.getElementById("publication-filter").value;
+
+        return data.filter(d => {
+            let passes = true;
+            
+            if (reuseTypeFilter !== "all") {
+                passes = passes && d.reuse_type === reuseTypeFilter;
+            }
+            
+            if (publicationFilter !== "all") {
+                passes = passes && (d.source_publication === publicationFilter || 
+                                  d.target_publication === publicationFilter);
+            }
+            
+            return passes;
+        });
+    }
+
+    // Update network with current filters
+    function updateNetwork() {
+        if (!globalReuseData) return;
+        createD3PageNetwork(globalReuseData);
+        populatePublicationLegend();
+    }
+
+    // Setup control event listeners (remove similarity slider)
+    function setupControls() {
+        // Populate publication filter
+        populatePublicationFilter(globalMetadata);
+        
+        // Filter dropdowns
+        document.getElementById("reuse-type-filter").addEventListener("change", updateNetwork);
+        document.getElementById("publication-filter").addEventListener("change", updateNetwork);
+
+        // Reset zoom button
+        document.getElementById("reset-zoom").addEventListener("click", function() {
+            if (window.resetZoom) window.resetZoom();
+        });
+    }
+</script>
 {% endblock %}
