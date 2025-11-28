@@ -774,62 +774,116 @@
         });
     }
 
-    // Main data loading
+    // Replace the entire "Main data loading" section at the bottom with this:
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, starting geographic data load...');
+        console.log('DOM loaded, starting direct CSV data load...');
         
-        // Load both datasets
+        // Load CSV files directly
         Promise.all([
-            d3.json("/api/reuse-data"),
-            d3.json("/api/metadata")  // We need this new endpoint
-        ]).then(function([reuseData, metadataData]) {
-            console.log('Raw geographic data received:', reuseData ? reuseData.length : 'null', 'reuse items');
-            console.log('Metadata received:', metadataData ? metadataData.length : 'null', 'metadata items');
+            d3.csv("{{ url_for('static', filename='data/text_reuse_ngrams_windowed_parallel_filtered.csv') }}"),
+            d3.csv("{{ url_for('static', filename='data/zinepage_metadata.csv') }}"),
+            d3.csv("{{ url_for('static', filename='data/zinepub_metadata.csv') }}")
+        ]).then(function([reuseData, pageMetadata, pubMetadata]) {
+            console.log('Raw CSV data loaded:');
+            console.log('- Reuse data:', reuseData.length, 'records');
+            console.log('- Page metadata:', pageMetadata.length, 'records');
+            console.log('- Publication metadata:', pubMetadata.length, 'records');
             
             if (!reuseData || reuseData.length === 0) {
-                throw new Error('No reuse data received from API');
+                throw new Error('No reuse data found in CSV');
             }
             
-            if (!metadataData || metadataData.length === 0) {
-                throw new Error('No metadata received from API');
-            }
-            
-            globalReuseData = reuseData;
-            globalMetadata = metadataData;
-            
-            // Parse numerical values and dates
-            reuseData.forEach(d => {
-                d.combined_similarity = +d.combined_similarity;
-                d.ngram_similarity = +d.ngram_similarity;
-                d.shingle_similarity = +d.shingle_similarity;
-                d.source_date = new Date(d.source_date);
-                d.target_date = new Date(d.target_date);
+            // Process the data
+            // 1. Create publication lookup from page metadata
+            const pubLookup = {};
+            pageMetadata.forEach(page => {
+                pubLookup[page.page_id] = page.publication_name;
             });
-
-            console.log('Geographic data processed, initializing network...');
+            
+            // 2. Process reuse data and add publication names
+            const processedReuseData = reuseData.map(d => {
+                // Get publication names from page metadata
+                const sourcePub = pubLookup[d.source_page_id] || 'Unknown';
+                const targetPub = pubLookup[d.target_page_id] || 'Unknown';
+                
+                // Determine reuse type based on similarity score
+                const similarity = +d.combined_similarity;
+                let reuseType;
+                if (similarity < 0.3) {
+                    reuseType = 'minimal_reuse';
+                } else if (similarity < 0.7) {
+                    reuseType = 'partial_reuse';
+                } else {
+                    reuseType = 'moderate_reuse';
+                }
+                
+                return {
+                    source_page_id: d.source_page_id,
+                    target_page_id: d.target_page_id,
+                    combined_similarity: +d.combined_similarity,
+                    ngram_similarity: +(d.ngram_similarity || 0),
+                    shingle_similarity: +(d.shingle_similarity || 0),
+                    source_publication: sourcePub,
+                    target_publication: targetPub,
+                    source_date: d.source_date || '',
+                    target_date: d.target_date || '',
+                    reuse_type: reuseType,
+                    shared_content: d.shared_content || ''
+                };
+            });
+            
+            // 3. Combine page and publication metadata
+            const combinedMetadata = pageMetadata.map(page => {
+                // Find matching publication metadata
+                const pubData = pubMetadata.find(pub => pub.publication_name === page.publication_name) || {};
+                
+                return {
+                    page_id: page.page_id,
+                    publication_name: page.publication_name,
+                    volume: page.volume || '',
+                    number: page.number || '',
+                    page_number: page.page_number || '',
+                    organization: pubData.organization || '',
+                    location: pubData.location || '',
+                    region: pubData.region || '',
+                    notes: pubData.notes || ''
+                };
+            });
+            
+            console.log('Data processing complete:');
+            console.log('- Processed reuse data:', processedReuseData.length, 'records');
+            console.log('- Combined metadata:', combinedMetadata.length, 'records');
+            
+            // Store globally for use by other functions
+            globalReuseData = processedReuseData;
+            globalMetadata = combinedMetadata;
             
             // Hide loading indicator
             document.getElementById('loading').style.display = 'none';
             document.getElementById('stats').style.display = 'flex';
             
             // Populate filters
-            populatePublicationFilter(metadataData);
+            populatePublicationFilter(combinedMetadata);
             
             // Initialize the network
-            createGeographicNetwork(reuseData, metadataData);
+            createGeographicNetwork(processedReuseData, combinedMetadata);
             setupControls();
             
             // Update the legend
-            updateLegend();
+            publicationColorManager.populateLegend('publication-legend');
 
         }).catch(function(error) {
-            console.error("Error loading the geographic data:", error);
-            document.querySelector('.container').innerHTML += 
-                `<div style="color: red; padding: 20px; background: #ffebee; border: 1px solid #f44336; border-radius: 5px; margin: 20px 0;">
-                    <h3>Error Loading Geographic Data</h3>
+            console.error("Error loading CSV data:", error);
+            document.getElementById('loading').innerHTML = 
+                `<div style="color: red; padding: 20px; background: #ffebee; border: 1px solid #f44336; border-radius: 5px;">
+                    <h3>Error Loading Data</h3>
                     <p><strong>Error:</strong> ${error.message}</p>
-                    <p>Check the browser console (F12) and Flask server logs for more details.</p>
-                    <p>Make sure the /api/metadata endpoint is available.</p>
+                    <p>Make sure these CSV files exist in your static/data/ folder:</p>
+                    <ul>
+                        <li>text_reuse_ngrams_windowed_parallel_filtered.csv</li>
+                        <li>zinepage_metadata.csv</li>
+                        <li>zinepub_metadata.csv</li>
+                    </ul>
                 </div>`;
         });
     });
