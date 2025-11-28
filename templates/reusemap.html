@@ -167,15 +167,15 @@
         <div class="legend-section">
             <h3>Reuse Types (Edge Colors)</h3>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                <div class="legend-color" style="background-color: #95a5a6;"></div>
                 <span>Minimal Reuse</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: #4ecdc4;"></div>
+                <div class="legend-color" style="background-color: #f39c12;"></div>
                 <span>Partial Reuse</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: #45b7d1;"></div>
+                <div class="legend-color" style="background-color: #e74c3c;"></div>
                 <span>Moderate Reuse</span>
             </div>
         </div>
@@ -192,61 +192,6 @@
 </div>
 
 <script>
-    // Check if publicationColorManager exists, create fallback if not
-    if (typeof publicationColorManager === 'undefined') {
-        console.warn('publicationColorManager not found, creating fallback');
-        
-        window.publicationColorManager = {
-            colors: {},
-            colorPalette: [
-                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-                '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-                '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2',
-                '#A3E4D7', '#F9E79F', '#AED6F1', '#A9DFBF', '#F5B7B1'
-            ],
-            
-            getColor: function(pubId, pubName) {
-                if (!this.colors[pubId]) {
-                    const colorIndex = Object.keys(this.colors).length % this.colorPalette.length;
-                    this.colors[pubId] = {
-                        color: this.colorPalette[colorIndex],
-                        name: pubName
-                    };
-                }
-                return this.colors[pubId].color;
-            },
-            
-            populateLegend: function(containerId) {
-                const container = document.getElementById(containerId);
-                if (!container) return;
-                
-                container.innerHTML = '';
-                
-                Object.entries(this.colors).forEach(([pubId, data]) => {
-                    const legendItem = document.createElement('div');
-                    legendItem.style.cssText = `
-                        display: flex;
-                        align-items: center;
-                        gap: 0.5rem;
-                        padding: 0.25rem 0.5rem;
-                        margin: 0.25rem;
-                        border-radius: 3px;
-                        background: white;
-                        border: 1px solid #ddd;
-                        font-size: 0.85em;
-                    `;
-                    
-                    legendItem.innerHTML = `
-                        <div style="width: 16px; height: 16px; background: ${data.color}; border-radius: 3px; border: 1px solid #ccc;"></div>
-                        <span>${data.name || `Publication ${pubId}`}</span>
-                    `;
-                    
-                    container.appendChild(legendItem);
-                });
-            }
-        };
-    }
-
     // Global variables
     let globalReuseData = null;
     let globalMetadata = null;
@@ -282,13 +227,8 @@
 
     // Helper functions
     function getReuseTypeColor(reuseType) {
-        const colors = {
-            "minimal_reuse": '#ff6b6b',
-            "partial_reuse": '#4ecdc4', 
-            "moderate_reuse": '#45b7d1'
-        };
-        return colors[reuseType] || '#999';
-    }
+    return reuseTypeColorManager.getColor(reuseType);
+}
 
     function applyCurrentFilters(data) {
         const reuseTypeFilter = document.getElementById("reuse-type-filter").value;
@@ -316,21 +256,6 @@
         document.getElementById('total-cities').textContent = cities;
         document.getElementById('publications-count').textContent = publications;
         document.getElementById('avg-similarity').textContent = avgSimilarity.toFixed(3);
-    }
-
-    function updateLegend() {
-        console.log('Updating legend...');
-        fetch('/api/publications')
-            .then(response => response.json())
-            .then(publications => {
-                publications.forEach(pub => {
-                    publicationColorManager.getColor(pub.pub_id, pub.publication_name);
-                });
-                publicationColorManager.populateLegend('publication-legend');
-            })
-            .catch(error => {
-                console.error('Error loading publications for legend:', error);
-            });
     }
 
     // Main geographic network function
@@ -642,7 +567,9 @@
                 .attr("r", d => Math.max(8, Math.min(25, d.pageCount * 2)))
                 .attr("fill", d => {
                     const pubs = Array.from(d.publications);
-                    return publicationColorManager.getColor(pubs[0], pubs[0]);
+                    // Use the proper publication name, not pub_id
+                    const primaryPub = pubs[0];
+                    return publicationColorManager.getColor(primaryPub);
                 })
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 2)
@@ -749,11 +676,6 @@
             option.value = pub;
             option.textContent = pub;
             publicationFilter.appendChild(option);
-        });
-
-        // Also register colors for each publication
-        publications.forEach(pub => {
-            publicationColorManager.getColor(pub, pub);
         });
     }
 
